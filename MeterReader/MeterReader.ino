@@ -12,6 +12,7 @@
 
 #define D_PIN 4       // Pin connected to LDR voltage divider, used for wake-up
                       // interrupts.
+#define L_PIN 5       // Pin connected to LED.
 
 #define NODE_ID 1
 #define NODE_GROUP 5
@@ -66,8 +67,10 @@ void setup() {
 
   bitSet(PCMSK2, D_PIN);
   bitSet(PCICR, PCIE2);
+  pinMode(L_PIN, OUTPUT);
 
   payload.id = NODE_ID;
+  payload.vcc = vccRead();
 }
 
 static byte sendPayload () {
@@ -83,14 +86,14 @@ static byte sendPayload () {
 
 void loop() {
   if (!wakeupState) {
+    digitalWrite(L_PIN, 1);
     // Went dark. Increment count.
     payload.counter++;
     if (payload.counter % 10 == 0) {
       payload.vcc = vccRead();
-      sendPayload();
     }
-  } else {
-    // Went light. Ignore.
+    sendPayload();
+    digitalWrite(L_PIN, 0);
   }
 
   // Sleep until next interrupt.
