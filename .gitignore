@@ -2,3 +2,5 @@
 .*.swp
 build-cli
 build-cli/*
+logs
+logs/*
