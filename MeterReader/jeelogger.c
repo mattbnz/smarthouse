@@ -111,20 +111,25 @@ int main(int argc, char **argv) {
             memcpy(linep, &buf, n);
             linep += n;
         }
-        char *p = strchr((char *)&line, '\n');
-        if (p && p < linep) {
-            time_t now = time(NULL);
-            if (!check_logfile(&log, now)) {
-                return 3;
+        char ts[1024];
+        time_t now = time(NULL);
+        int tslen = sprintf((char *)&ts, "%lld ", (long long)now);
+        while (1) {
+            char *p = strchr((char *)&line, '\n');
+            if (p && p < linep) {
+                if (!check_logfile(&log, now)) {
+                    return 3;
+                }
+                write(log.fd, &ts, tslen);
+                write(log.fd, &line, ((p+1) - (char *)&line));
+                int len = linep - (p+1);
+                char tmp[1024];
+                memcpy(&tmp, p+1, len);
+                memcpy(&line, &tmp, len);
+                linep = (char *)&line + len;
+            } else {
+                break;
             }
-            char tmp[1024];
-            n = sprintf((char *)&tmp, "%lld ", (long long)now);
-            write(log.fd, &tmp, n);
-            write(log.fd, &line, ((p+1) - (char *)&line));
-            int len = linep - (p+1);
-            memcpy(&tmp, p+1, len);
-            memcpy(&line, &tmp, len);
-            linep = (char *)&line + len;
         }
     }
     close(fd);
