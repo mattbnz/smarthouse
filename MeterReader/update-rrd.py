@@ -19,10 +19,12 @@
 #
 # Reads logger.py output and generates rrd updates.
 import os
+import subprocess
 import sys
 import time
 
-STEP_SIZE = 300
+STEP_SIZE = 60
+latest_update = -1
 
 def parse_long(parts, offset):
   val = 0
@@ -45,70 +47,88 @@ def parse_line(line):
 
 
 def update_rrd(ts, counter, bat):
-  cmd = 'rrdtool update %s %s:%s:%s' % (sys.argv[2], int(ts), counter, bat)
+  if ts < latest_update:
+    return
+  cmd = 'rrdtool update %s %s:%s:%s' % (sys.argv[1], int(ts), counter, bat)
   #print time.ctime(ts), cmd
   os.system(cmd)
 
+def last_update():
+  cmd = ['rrdtool', 'info', sys.argv[1]]
+  output = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
+  for line in output.split('\n'):
+    if not line.startswith('last_update'):
+      continue
+    return int(line.strip()[14:])
+  return -1
+
 def main():
+  global latest_update
   if len(sys.argv) < 2:
-    sys.stderr.write('Usage: %s /path/to/log /path/to/rrd\n' % sys.argv[0])
+    sys.stderr.write('Usage: %s rrd_file logfile1 [logfile2, ...]\n' %
+        sys.argv[0])
     sys.exit(1)
   
+  latest_update = last_update()
   first_count = 0
   first_ts = 0
   start_ts = 0
   start_counter = 0
   realcount = 0
   lastline = None
-  for line in open(sys.argv[1], 'r'):
-    if ' OK ' not in line:
-      continue
-    parts = line.strip().split(' ')
-    ts, ping_id, counter, bat = parse_line(line)
-    if lastline:
-      last_ts, last_ping, last_counter, last_bat = parse_line(lastline)
-      while last_ts < (ts - (STEP_SIZE + 1)):
-        # Make sure rrd gets data as often as it needs.
-        last_ts += STEP_SIZE
-        update_rrd(last_ts, realcounter, last_bat)
+  for filename in sys.argv[2:]:
+    for line in open(filename, 'r'):
+      if ' OK ' not in line:
+        continue
+      parts = line.strip().split(' ')
+      try:
+        ts, ping_id, counter, bat = parse_line(line)
+      except:
+        continue
+      if lastline:
+        last_ts, last_ping, last_counter, last_bat = parse_line(lastline)
+        while last_ts < (ts - (STEP_SIZE + 1)):
+          # Make sure rrd gets data as often as it needs.
+          last_ts += STEP_SIZE
+          update_rrd(last_ts, realcounter, last_bat)
 
-      if ping_id == 1:
-        # Reboot
-        step = 1
-      elif ping_id - 1 != last_ping:
-        if counter > last_counter:
-          # Easy, just subtract.
-          step = counter - last_counter
-        else:
-          # Harder, use ping_id to judge missing reports.
-          missing = ping_id - last_ping
-          if len(parts) < 13:
-            step = (10 * missing) - 4   # 10 counts per report, minus 4 for wrap.
+        if ping_id == 1:
+          # Reboot
+          step = 1
+        elif ping_id - 1 != last_ping:
+          if counter > last_counter:
+            # Easy, just subtract.
+            step = counter - last_counter
           else:
-            # Unlikely!
-            step = missing
+            # Harder, use ping_id to judge missing reports.
+            missing = ping_id - last_ping
+            if len(parts) < 13:
+              step = (10 * missing) - 4   # 10 counts per report, minus 4 for wrap.
+            else:
+              # Unlikely!
+              step = missing
+        else:
+          if counter == 0:
+            if len(parts) < 13:
+              # Handle wrap with old-style byte counter.
+              step = 6
+            else:
+              # Handle wrap with new-style long counter.
+              step = 2**32 - last_counter
+          else:
+            step = counter - last_counter
+        realcounter += step
       else:
-        if counter == 0:
-          if len(parts) < 13:
-            # Handle wrap with old-style byte counter.
-            step = 6
-          else:
-            # Handle wrap with new-style long counter.
-            step = 2**32 - last_counter
-        else:
-          step = counter - last_counter
-      realcounter += step
-    else:
-      realcounter = first_count = counter
-      start_ts = first_ts = ts
-      start_counter = counter
-    lastline = line
-    update_rrd(ts, realcounter, bat)
-    if ts - start_ts > 3600:
-      usage = realcounter - start_counter
-      print 'Kwh from %s til %s: %.02fkWh' % (time.ctime(start_ts), time.ctime(ts), usage*6/1000.0)
-      start_ts = ts
-      start_counter = realcounter
+        realcounter = first_count = counter
+        start_ts = first_ts = ts
+        start_counter = counter
+      lastline = line
+      update_rrd(ts, realcounter, bat)
+      if ts - start_ts > 3600:
+        usage = realcounter - start_counter
+        print 'Kwh from %s til %s: %.02fkWh' % (time.ctime(start_ts), time.ctime(ts), usage*6/1000.0)
+        start_ts = ts
+        start_counter = realcounter
   usage = realcounter - first_count
   print 'Kwh from %s til %s: %.02fkWh' % (time.ctime(first_ts), time.ctime(ts), usage*6/1000.0)
 
