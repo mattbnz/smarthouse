@@ -49,7 +49,7 @@ int create_logfile(struct logfile* log, time_t now) {
 int check_logfile(struct logfile* log, time_t now) {
     if (log->expires_at == -1) {
         return create_logfile(log, now);
-    } else if (now < log->expires_at) {
+    } else if (now <= log->expires_at) {
         return 1;
     }
     // Rotation needed.
