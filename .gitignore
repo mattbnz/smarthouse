@@ -4,3 +4,5 @@ build-cli
 build-cli/*
 logs
 logs/*
+MeterReader/jeelogger
+MeterReader/jeelogger.mips
