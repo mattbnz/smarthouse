@@ -18,8 +18,18 @@
 #define NODE_GROUP 5
 #define SEND_MODE 2   // set to 3 if fuses are e=06/h=DE/l=CE, else set to 2
 
+#define REPORT_FREQ 60000 // Time between reports in ms.
+
 volatile bool wakeupState;
 volatile bool adcDone;
+volatile unsigned long lastReport;
+
+struct {
+  long ping;  // 32-bit counter
+  byte id;    // identity, should be different for each node
+  byte vcc;  //  VCC before transmit, 1.0V = 0 .. 6.0V = 250
+  long counter;
+} payload;
 
 // for low-noise/-power ADC readouts, we'll use ADC completion interrupts
 ISR(ADC_vect) { adcDone = true; }
@@ -29,13 +39,6 @@ ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
 // Need this for pin interrupts
 ISR(PCINT2_vect) { wakeupState = digitalRead(D_PIN); }
-
-struct {
-  long ping;  // 32-bit counter
-  byte id;    // identity, should be different for each node
-  byte vcc;  //  VCC before transmit, 1.0V = 0 .. 6.0V = 250
-  long counter;
-} payload;
 
 static byte vccRead (byte count =4) {
   set_sleep_mode(SLEEP_MODE_ADC);
@@ -71,6 +74,7 @@ void setup() {
 
   payload.id = NODE_ID;
   payload.vcc = vccRead();
+  lastReport = 0;
 }
 
 static byte sendPayload () {
@@ -89,15 +93,17 @@ void loop() {
     digitalWrite(L_PIN, 1);
     // Went dark. Increment count.
     payload.counter++;
-    if (payload.counter % 10 == 0) {
-      payload.vcc = vccRead();
-    }
-    sendPayload();
     digitalWrite(L_PIN, 0);
   }
-
-  // Sleep until next interrupt.
-  Sleepy::powerDown();
+  wakeupState = 1;
+  unsigned long now = millis();
+  if (now - lastReport > REPORT_FREQ) {
+    // Time to send a report.
+    payload.vcc = vccRead();
+    sendPayload();
+    lastReport = now;
+  }
+  Sleepy::loseSomeTime((lastReport + REPORT_FREQ) - now);
 }
 
 // Vim modeline
