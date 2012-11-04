@@ -2,7 +2,8 @@
 ARDUINO_DIR = /usr/share/arduino
 
 TARGET = MeterReader
-ARDUINO_LIBS = Jeelib
+ARDUINO_LIBS = Jeelib OneWire DallasTemp
+
 
 BOARDS_TXT  = $(ARDUINO_DIR)/hardware/arduino/boards.txt
 PARSE_BOARD = $(ARDUINO_DIR)/ard-parse-boards --boards_txt=$(BOARDS_TXT)

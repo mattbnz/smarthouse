@@ -9,16 +9,19 @@
 // Based on the radioBlip2 example from Jeelib, 2012-05-09 <jc@wippler.nl>.
 #include <JeeLib.h>
 #include <avr/sleep.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #define D_PIN 4       // Pin connected to LDR voltage divider, used for wake-up
                       // interrupts.
 #define L_PIN 5       // Pin connected to LED.
+#define BUS_PIN 6     // Pin connected to one-wire bus.
 
 #define NODE_ID 1
 #define NODE_GROUP 5
 #define SEND_MODE 2   // set to 3 if fuses are e=06/h=DE/l=CE, else set to 2
 
-#define REPORT_FREQ 60000 // Time between reports in ms.
+#define REPORT_FREQ 50000 // Time between reports in ms.
 
 volatile bool wakeupState;
 volatile bool adcDone;
@@ -29,6 +32,7 @@ struct {
   byte id;    // identity, should be different for each node
   byte vcc;  //  VCC before transmit, 1.0V = 0 .. 6.0V = 250
   long counter;
+  float temp;
 } payload;
 
 // for low-noise/-power ADC readouts, we'll use ADC completion interrupts
@@ -39,6 +43,9 @@ ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 
 // Need this for pin interrupts
 ISR(PCINT2_vect) { wakeupState = digitalRead(D_PIN); }
+
+OneWire oneWire(BUS_PIN);
+DallasTemperature sensors(&oneWire);
 
 static byte vccRead (byte count =4) {
   set_sleep_mode(SLEEP_MODE_ADC);
@@ -53,6 +60,11 @@ static byte vccRead (byte count =4) {
   // convert ADC readings to fit in one byte, i.e. 20 mV steps:
   //  1.0V = 0, 1.8V = 40, 3.3V = 115, 5.0V = 200, 6.0V = 250
   return (55U * 1024U) / (ADC + 1) - 50;
+}
+
+static float readTemp() {
+  sensors.requestTemperatures();
+  return sensors.getTempCByIndex(0);
 }
 
 void setup() {
@@ -72,8 +84,16 @@ void setup() {
   bitSet(PCICR, PCIE2);
   pinMode(L_PIN, OUTPUT);
 
+  sensors.begin();
+  for (int i=0; i<sensors.getDeviceCount(); i++) {
+    DeviceAddress tmp;
+    sensors.getAddress(tmp, i);  
+    sensors.setResolution(tmp, 12);  // We like our resolution.
+  }
+
   payload.id = NODE_ID;
   payload.vcc = vccRead();
+  payload.temp = readTemp();
   lastReport = 0;
 }
 
@@ -100,6 +120,7 @@ void loop() {
   if (now - lastReport > REPORT_FREQ) {
     // Time to send a report.
     payload.vcc = vccRead();
+    payload.temp = readTemp();
     sendPayload();
     lastReport = now;
   }
