@@ -6,9 +6,11 @@
 
 #define D_PIN 4
 #define A_PIN 0
+#define L_PIN 5       // Pin connected to LED.
 
 void setup() {
   Serial.begin(57600);
+  pinMode(L_PIN, OUTPUT);
 }
 
 void loop() {
@@ -19,6 +21,7 @@ void loop() {
   Serial.print(". Analog=");
   Serial.print(anlg);
   Serial.println(".");
+  digitalWrite(L_PIN, !state);
   delay(500);
 }
 
