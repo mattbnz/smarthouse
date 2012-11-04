@@ -92,11 +92,11 @@ def main():
           last_ts += STEP_SIZE
           update_rrd(last_ts, realcounter, last_bat)
 
-        if ping_id == 1:
+        if ping_id == 1 or counter < last_counter:
           # Reboot
           step = 1
         elif ping_id - 1 != last_ping:
-          if counter > last_counter:
+          if counter >= last_counter:
             # Easy, just subtract.
             step = counter - last_counter
           else:
@@ -109,14 +109,19 @@ def main():
               step = missing
         else:
           if counter == 0:
+            step = 0
+            # Might be a wrap... Check if last counter value was high.
             if len(parts) < 13:
-              # Handle wrap with old-style byte counter.
-              step = 6
+              if last_counter > ((2*8)*0.9):
+                # Handle wrap with old-style byte counter.
+                step = 6
             else:
-              # Handle wrap with new-style long counter.
-              step = 2**32 - last_counter
+              if last_counter > ((2**32)*0.9):
+                # Handle wrap with new-style long counter.
+                step = 2**32 - last_counter
           else:
             step = counter - last_counter
+        #print ping_id, last_ping, counter, last_counter
         realcounter += step
       else:
         realcounter = first_count = counter
