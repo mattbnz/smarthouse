@@ -40,7 +40,7 @@ def parse_line(line):
   if len(parts) == 10:
     # Old format, single byte counter.
     counter = int(parts[9])
-  elif len(parts) == 13:
+  elif len(parts) >= 13:
     # New format, long counter.
     counter = parse_long(parts, 9)
   return ts, ping_id, counter, bat
