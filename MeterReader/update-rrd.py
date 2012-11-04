@@ -92,7 +92,7 @@ def main():
           last_ts += STEP_SIZE
           update_rrd(last_ts, realcounter, last_bat)
 
-        if ping_id == 1:
+        if ping_id == 1 or counter < last_counter:
           # Reboot
           step = 1
         elif ping_id - 1 != last_ping:
@@ -121,6 +121,7 @@ def main():
                 step = 2**32 - last_counter
           else:
             step = counter - last_counter
+        #print ping_id, last_ping, counter, last_counter
         realcounter += step
       else:
         realcounter = first_count = counter
