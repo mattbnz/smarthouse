@@ -68,10 +68,13 @@ class RRDUpdater(object):
       counter = self.ParseLong(parts, 9)
     return ts, ping_id, counter, bat
 
-  def UpdateRRD(self, ts, counter, bat):
+  def UpdateRRD(self, ts, **kwargs):
     if ts < self.latest_update:
       return
-    cmd = 'rrdtool update %s %s:%s:%s' % (self.rrdfile, int(ts), counter, bat)
+    keys = kwargs.keys()
+    template = '-t %s' % ':'.join(keys)
+    datastr = ':'.join(['%s' % kwargs[k] for k in keys])
+    cmd = 'rrdtool update %s %s %s:%s' % (self.rrdfile, template, int(ts), datastr)
     #print time.ctime(ts), cmd
     os.system(cmd)
 
@@ -153,7 +156,7 @@ class RRDUpdater(object):
       while last_ts < (ts - (STEP_SIZE + 1)):
         # Make sure rrd gets data as often as it needs.
         last_ts += STEP_SIZE
-        self.UpdateRRD(last_ts, hist.realcounter, last_bat)
+        self.UpdateRRD(last_ts, kWh=hist.realcounter, bat=last_bat)
 
       hist.realcounter += self.CalculateStep(ping_id, counter, last_counter,
           last_ping, len(parts))
@@ -165,7 +168,7 @@ class RRDUpdater(object):
       hist.start_counter = counter
     hist.lastline = parts
     hist.last_ts = ts
-    self.UpdateRRD(ts, hist.realcounter, bat)
+    self.UpdateRRD(ts, kWh=hist.realcounter, bat=bat)
     if ts - hist.start_ts > 3600:
       usage = hist.realcounter - hist.start_counter
       print 'Kwh from %s til %s: %.02fkWh' % (
