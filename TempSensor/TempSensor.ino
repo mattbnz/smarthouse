@@ -18,7 +18,7 @@
 #define NODE_GROUP 5
 #define SEND_MODE 2   // set to 3 if fuses are e=06/h=DE/l=CE, else set to 2
 
-#define REPORT_FREQ 300000 // Time between reports in ms.
+#define REPORT_FREQ 120000 // Time between reports in ms.
 
 volatile bool adcDone;
 volatile unsigned long lastReport;
