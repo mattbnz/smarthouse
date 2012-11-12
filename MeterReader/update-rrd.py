@@ -5,20 +5,29 @@
 # All rights reserved.
 #
 # Example RRD commands for use with this script:
-# rrdtool create /tmp/test.rrd -b 1351378113 -s 60 \
-#    DS:kWh:COUNTER:300:U:U DS:bat:GAUGE:300:U:U \
-#    RRA:AVERAGE:0.5:1:2628000 RRA:AVERAGE:0.5:5:525600
+# rrdtool create /tmp/temp.rrd -b 1351378113 -s 300 \
+#    DS:node2_temp:GAUGE:3600:0:255 DS:node3_temp:GAUGE:3600:0:255 \
+#    RRA:AVERAGE:0.9:1:2628000 RRA:AVERAGE:0.9:5:525600
+# rrdtool create /tmp/bat.rrd -b 1351378113 -s 300 \
+#    DS:bat:GAUGE:3600:0:255 DS:node2_bat:GAUGE:3600:0:255 \
+#    DS:node3_bat:GAUGE:3600:0:255 \
+#    RRA:AVERAGE:0.9:1:2628000 RRA:AVERAGE:0.9:5:525600
+# rrdtool create /tmp/power.rrd -b 1351378113 -s 60 \
+#    DS:kWh:COUNTER:300:U:U RRA:AVERAGE:0.9:1:2628000 \
+#    RRA:AVERAGE:0.9:5:525600
+#
 # rrdtool graph /tmp/test.png --start end-48h --lower-limit 0 \
-#    --title "Electrical Power Usage" DEF:power=/tmp/test.rrd:kWh:AVERAGE \
+#    --title "Electrical Power Usage" DEF:power=/tmp/power.rrd:kWh:AVERAGE \
 #    --vertical-label Watts --width 800 --height 600 \
 #    CDEF:watts=power,21600,\* LINE1:watts#ff0000:Power && eog /tmp/test.png
 # rrdtool graph /tmp/test.png --start end-48h --lower-limit 0 \
-#    --title "Battery voltage" DEF:bat=/tmp/test.rrd:bat:AVERAGE \
+#    --title "Battery voltage" DEF:bat=/tmp/bat.rrd:bat:AVERAGE \
 #    --vertical-label mV --width 800 --height 600 CDEF:mv=bat,50,\+,20,\* \
 #    LINE1:mv#ff0000:Voltage && eog /tmp/test.png
 #
 # Reads logger.py output and generates rrd updates.
 import os
+import struct
 import subprocess
 import sys
 import time
@@ -45,9 +54,9 @@ class History(object):
 
 class RRDUpdater(object):
 
-  def __init__(self, rrdfile):
-    self.rrdfile = rrdfile
-    self.latest_update = self.GetLastRRDUpdate()
+  def __init__(self, rrd_dir):
+    self.rrd_dir = rrd_dir
+    self.latest_update = {}
     self.history = {}
 
   def ParseLong(self, parts, offset):
@@ -55,6 +64,12 @@ class RRDUpdater(object):
     for byte in xrange(0, 4):
       val += int(parts[offset+byte]) << (8*byte)
     return val
+
+  def ParseFloat(self, parts, offset):
+    d = ''
+    for byte in xrange(0, 4):
+      d += chr(int(parts[offset+byte]))
+    return struct.unpack('<f', d)
 
   def ParseMeterLine(self, parts):
     ts = float(parts[0])
@@ -68,24 +83,47 @@ class RRDUpdater(object):
       counter = self.ParseLong(parts, 9)
     return ts, ping_id, counter, bat
 
-  def UpdateRRD(self, ts, **kwargs):
-    if ts < self.latest_update:
-      return
-    keys = kwargs.keys()
-    template = '-t %s' % ':'.join(keys)
-    datastr = ':'.join(['%s' % kwargs[k] for k in keys])
-    cmd = 'rrdtool update %s %s %s:%s' % (self.rrdfile, template, int(ts), datastr)
-    #print time.ctime(ts), cmd
-    os.system(cmd)
+  def ParseTempSensorLine(self, parts):
+    ts = float(parts[0])
+    ping_id = self.ParseLong(parts, 3)
+    bat = int(parts[8])
+    temp = self.ParseFloat(parts, 9)
+    return ts, ping_id, temp, bat
 
-  def GetLastRRDUpdate(self):
-    cmd = ['rrdtool', 'info', self.rrdfile]
-    output = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
-    for line in output.split('\n'):
-      if not line.startswith('last_update'):
+  def RRDForDs(self, ds):
+    if ds.endswith('bat'):
+      return os.path.join(self.rrd_dir, 'bat.rrd')
+    if ds.endswith('temp'):
+      return os.path.join(self.rrd_dir, 'temp.rrd')
+    return os.path.join(self.rrd_dir, 'power.rrd')
+
+  def UpdateRRD(self, ts, **kwargs):
+    files = {}
+    for ds, val in kwargs.iteritems():
+      rrd = self.RRDForDs(ds)
+      files.setdefault(rrd, {})
+      files[rrd][ds] = val
+    for rrd, data in files.iteritems():
+      if ts < self.LastUpdateFor(rrd):
         continue
-      return int(line.strip()[14:])
-    return -1
+      keys = data.keys()
+      template = '-t %s' % ':'.join(keys)
+      datastr = ':'.join(['%s' % data[k] for k in keys])
+      cmd = 'rrdtool update %s %s %s:%s' % (rrd, template, int(ts), datastr)
+      #print time.ctime(ts), cmd
+      os.system(cmd)
+
+  def LastUpdateFor(self, rrd):
+    if rrd not in self.latest_update:
+      self.latest_update[rrd] = -1
+      cmd = ['rrdtool', 'info', rrd]
+      output = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
+      for line in output.split('\n'):
+        if not line.startswith('last_update'):
+          continue
+        self.latest_update[rrd] = int(line.strip()[14:])
+        break
+    return self.latest_update[rrd]
 
   def GetOrCreateNodeHistory(self, node_id):
     if node_id not in self.history:
@@ -108,7 +146,16 @@ class RRDUpdater(object):
     pass
 
   def ProcessTempSensor(self, node_id, parts):
-    pass
+    try:
+      ts, ping_id, temp, bat = self.ParseTempSensorLine(parts)
+    except Exception, e:
+      print 'Ignoring line "%s"' % ' '.join(parts), e
+      return
+    kwargs = {
+        'node%d_temp' % node_id: temp,
+        'node%d_bat' % node_id: bat,
+    }
+    self.UpdateRRD(ts, **kwargs)
 
   def CalculateStep(self, ping_id, counter, last_counter, last_ping, len_parts):
     if ping_id == 1 or counter < last_counter:
