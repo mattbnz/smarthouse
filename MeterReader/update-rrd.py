@@ -142,8 +142,8 @@ class RRDUpdater(object):
         handler = getattr(self, NODE_HANDLERS.get(node_id, 'IgnoreLine'))
         handler(node_id, parts)
 
-  def IgnoreLine(self, parts):
-    pass
+  def IgnoreLine(self, node_id, parts):
+    print 'Ignoring line "%s"' % ' '.join(parts)
 
   def ProcessTempSensor(self, node_id, parts):
     try:
