@@ -178,6 +178,7 @@ class RRDUpdater(object):
         'node%d_temp' % node_id: temp,
         'node%d_bat' % node_id: bat,
     }
+    print 'temp', ts, data
     self.UpdateRRD(ts, data)
 
   def CalculateStep(self, ping_id, counter, last_counter, last_ping, len_parts):
@@ -235,6 +236,7 @@ class RRDUpdater(object):
       #      'node%d_kWh' % node_id: hist.realcounter,
       #      'node%d_bat' % node_id: last_bat,
       #  }
+      #  print 'meter synth', last_ts, data
       #  self.UpdateRRD(last_ts, data)
 
       hist.realcounter += self.CalculateStep(ping_id, counter, last_counter,
@@ -251,6 +253,7 @@ class RRDUpdater(object):
         'node%d_kWh' % node_id: hist.realcounter,
         'node%d_bat' % node_id: bat,
     }
+    print 'meter', hist.last_ts, data
     self.UpdateRRD(hist.last_ts, data)
     if ts - hist.start_ts > 3600:
       usage = hist.realcounter - hist.start_counter
