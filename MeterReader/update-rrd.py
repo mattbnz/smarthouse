@@ -49,8 +49,11 @@ class RRDUpdater(object):
 
   def __init__(self, rrd_dir):
     self.rrd_dir = rrd_dir
+    self.update_ts = None
+    self.update_queue = {}
     self.latest_update = {}
     self.history = {}
+    self.current_line = None
 
   def CheckOrCreateRRDs(self):
     if not os.path.exists(self.RRDForDs('foo_bat')):
@@ -112,21 +115,30 @@ class RRDUpdater(object):
       return os.path.join(self.rrd_dir, 'temp.rrd')
     return os.path.join(self.rrd_dir, 'power.rrd')
 
-  def UpdateRRD(self, ts, **kwargs):
+  def UpdateRRD(self, ts, updates):
+    if self.update_ts and self.update_ts != ts:
+      self.FlushUpdateQueue()
+    # Queue requested updates for insertion.
+    self.update_queue.update(updates)
+    self.update_ts = ts
+
+  def FlushUpdateQueue(self):
     files = {}
-    for ds, val in kwargs.iteritems():
+    for ds, val in self.update_queue.iteritems():
       rrd = self.RRDForDs(ds)
       files.setdefault(rrd, {})
       files[rrd][ds] = val
     for rrd, data in files.iteritems():
-      if ts < self.LastUpdateFor(rrd):
+      if self.update_ts < self.LastUpdateFor(rrd):
         continue
       keys = data.keys()
       datastr = ':'.join(['%s' % data[k] for k in keys])
       try:
-        rrdtool.update(rrd, '-t', ':'.join(keys), '%s:%s' % (int(ts), datastr))
+        rrdtool.update(rrd, '-t', ':'.join(keys),
+            '%s:%s' % (int(self.update_ts), datastr))
       except rrdtool.error, e:
-        print e, 'from', kwargs
+        print e, 'from', self.update_queue, 'at', self.current_line
+    self.update_queue = {}
 
   def LastUpdateFor(self, rrd):
     if rrd not in self.latest_update:
@@ -142,6 +154,7 @@ class RRDUpdater(object):
     self.CheckOrCreateRRDs()
     for filename in files:
       for line in open(filename, 'r'):
+        self.current_line = line.strip()
         parts = line.strip().split(' ')
         if len(parts) < 3:
           continue
@@ -150,6 +163,7 @@ class RRDUpdater(object):
         node_id = int(parts[2])
         handler = getattr(self, NODE_HANDLERS.get(node_id, 'IgnoreLine'))
         handler(node_id, parts)
+    self.FlushUpdateQueue()
 
   def IgnoreLine(self, node_id, parts):
     print 'Ignoring line "%s"' % ' '.join(parts)
@@ -160,11 +174,11 @@ class RRDUpdater(object):
     except Exception, e:
       print 'Ignoring line "%s"' % ' '.join(parts), e
       return
-    kwargs = {
+    data = {
         'node%d_temp' % node_id: temp,
         'node%d_bat' % node_id: bat,
     }
-    self.UpdateRRD(ts, **kwargs)
+    self.UpdateRRD(ts, data)
 
   def CalculateStep(self, ping_id, counter, last_counter, last_ping, len_parts):
     if ping_id == 1 or counter < last_counter:
@@ -209,14 +223,19 @@ class RRDUpdater(object):
     hist = self.GetOrCreateNodeHistory(node_id)
     if hist.lastline:
       last_ts, last_ping, last_counter, last_bat = self.ParseMeterLine(hist.lastline)
-      while last_ts < (ts - (POWER_STEP_SIZE + 1)):
-        # Make sure rrd gets data as often as it needs.
-        last_ts += POWER_STEP_SIZE
-        kwargs = {
-            'node%d_kWh' % node_id: hist.realcounter,
-            'node%d_bat' % node_id: last_bat,
-        }
-        self.UpdateRRD(last_ts, **kwargs)
+      # I think this causes more harm than good now, since battery/temp
+      # measurements from other sensors can move the rrd ts past what we try to
+      # synthesize. Meter Reader should be reporting frequently enough for this
+      # not to be required anymore. Can deal with crappy gaps from the first
+      # few days when this was useful.
+      #while last_ts < (ts - (POWER_STEP_SIZE + 1)):
+      #  # Make sure rrd gets data as often as it needs.
+      #  last_ts += POWER_STEP_SIZE
+      #  data = {
+      #      'node%d_kWh' % node_id: hist.realcounter,
+      #      'node%d_bat' % node_id: last_bat,
+      #  }
+      #  self.UpdateRRD(last_ts, data)
 
       hist.realcounter += self.CalculateStep(ping_id, counter, last_counter,
           last_ping, len(parts))
@@ -228,11 +247,11 @@ class RRDUpdater(object):
       hist.start_counter = counter
     hist.lastline = parts
     hist.last_ts = ts
-    kwargs = {
+    data = {
         'node%d_kWh' % node_id: hist.realcounter,
         'node%d_bat' % node_id: bat,
     }
-    self.UpdateRRD(hist.last_ts, **kwargs)
+    self.UpdateRRD(hist.last_ts, data)
     if ts - hist.start_ts > 3600:
       usage = hist.realcounter - hist.start_counter
       print 'Kwh from %s til %s: %.02fkWh' % (
