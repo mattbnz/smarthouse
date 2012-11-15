@@ -5,40 +5,33 @@
 # All rights reserved.
 #
 # Example RRD commands for use with this script:
-# rrdtool create /tmp/temp.rrd -b 1351378113 -s 300 \
-#    DS:node2_temp:GAUGE:3600:0:255 DS:node3_temp:GAUGE:3600:0:255 \
-#    RRA:AVERAGE:0.9:1:2628000 RRA:AVERAGE:0.9:5:525600
-# rrdtool create /tmp/bat.rrd -b 1351378113 -s 300 \
-#    DS:bat:GAUGE:3600:0:255 DS:node2_bat:GAUGE:3600:0:255 \
-#    DS:node3_bat:GAUGE:3600:0:255 \
-#    RRA:AVERAGE:0.9:1:2628000 RRA:AVERAGE:0.9:5:525600
-# rrdtool create /tmp/power.rrd -b 1351378113 -s 60 \
-#    DS:kWh:COUNTER:300:U:U RRA:AVERAGE:0.9:1:2628000 \
-#    RRA:AVERAGE:0.9:5:525600
-#
 # rrdtool graph /tmp/test.png --start end-48h --lower-limit 0 \
-#    --title "Electrical Power Usage" DEF:power=/tmp/power.rrd:kWh:AVERAGE \
+#    --title "Electrical Power Usage" DEF:power=/tmp/power.rrd:node1_kWh:AVERAGE \
 #    --vertical-label Watts --width 800 --height 600 \
 #    CDEF:watts=power,21600,\* LINE1:watts#ff0000:Power && eog /tmp/test.png
 # rrdtool graph /tmp/test.png --start end-48h --lower-limit 0 \
-#    --title "Battery voltage" DEF:bat=/tmp/bat.rrd:bat:AVERAGE \
+#    --title "Battery voltage" DEF:bat=/tmp/bat.rrd:node1_bat:AVERAGE \
 #    --vertical-label mV --width 800 --height 600 CDEF:mv=bat,50,\+,20,\* \
 #    LINE1:mv#ff0000:Voltage && eog /tmp/test.png
 #
 # Reads logger.py output and generates rrd updates.
 import os
+import rrdtool
 import struct
 import subprocess
 import sys
 import time
 
-STEP_SIZE = 60
-latest_update = -1
+START_TS = 1351378113
+RRA_ALL = 'RRA:AVERAGE:0.9:1:2628000'
+RRA_5 = 'RRA:AVERAGE:0.9:5:525600'
+POWER_STEP_SIZE = 60
 
 NODE_HANDLERS = {
     1: 'ProcessMeterReader',
     2: 'ProcessTempSensor',
     3: 'ProcessTempSensor',
+    4: 'ProcessTempSensor',
 }
 
 class History(object):
@@ -58,6 +51,28 @@ class RRDUpdater(object):
     self.rrd_dir = rrd_dir
     self.latest_update = {}
     self.history = {}
+
+  def CheckOrCreateRRDs(self):
+    if not os.path.exists(self.RRDForDs('foo_bat')):
+      self.CreateRRD('bat')
+    if not os.path.exists(self.RRDForDs('foo_temp')):
+      self.CreateRRD('temp', 'ProcessTempSensor')
+    if not os.path.exists(self.RRDForDs('power')):
+      self.CreateRRD('kWh', 'ProcessMeterReader', 'COUNTER:300:U:U')
+    
+  def CreateRRD(self, suffix, only_handler=None, ds_type='GAUGE:3600:0:255'):
+    rrdfile = self.RRDForDs('foo_%s' % suffix)
+    data_sources = []
+    for node_id, node_handler in NODE_HANDLERS.iteritems():
+      if only_handler and node_handler != only_handler:
+        continue
+      data_sources.append('DS:node%d_%s:%s' % (
+        node_id, suffix, ds_type))
+    rrdtool.create(rrdfile,
+        '--start', str(START_TS), '--step', '300',
+        data_sources,
+        RRA_ALL, RRA_5)
+    print 'Created new RRD %s' % rrdfile
 
   def ParseLong(self, parts, offset):
     val = 0
@@ -107,22 +122,15 @@ class RRDUpdater(object):
       if ts < self.LastUpdateFor(rrd):
         continue
       keys = data.keys()
-      template = '-t %s' % ':'.join(keys)
       datastr = ':'.join(['%s' % data[k] for k in keys])
-      cmd = 'rrdtool update %s %s %s:%s' % (rrd, template, int(ts), datastr)
-      #print time.ctime(ts), cmd
-      os.system(cmd)
+      try:
+        rrdtool.update(rrd, '-t', ':'.join(keys), '%s:%s' % (int(ts), datastr))
+      except rrdtool.error, e:
+        print e, 'from', kwargs
 
   def LastUpdateFor(self, rrd):
     if rrd not in self.latest_update:
-      self.latest_update[rrd] = -1
-      cmd = ['rrdtool', 'info', rrd]
-      output = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
-      for line in output.split('\n'):
-        if not line.startswith('last_update'):
-          continue
-        self.latest_update[rrd] = int(line.strip()[14:])
-        break
+      self.latest_update[rrd] = rrdtool.last(rrd)
     return self.latest_update[rrd]
 
   def GetOrCreateNodeHistory(self, node_id):
@@ -131,6 +139,7 @@ class RRDUpdater(object):
     return self.history[node_id]
 
   def ProcessFiles(self, files):
+    self.CheckOrCreateRRDs()
     for filename in files:
       for line in open(filename, 'r'):
         parts = line.strip().split(' ')
@@ -200,10 +209,14 @@ class RRDUpdater(object):
     hist = self.GetOrCreateNodeHistory(node_id)
     if hist.lastline:
       last_ts, last_ping, last_counter, last_bat = self.ParseMeterLine(hist.lastline)
-      while last_ts < (ts - (STEP_SIZE + 1)):
+      while last_ts < (ts - (POWER_STEP_SIZE + 1)):
         # Make sure rrd gets data as often as it needs.
-        last_ts += STEP_SIZE
-        self.UpdateRRD(last_ts, kWh=hist.realcounter, bat=last_bat)
+        last_ts += POWER_STEP_SIZE
+        kwargs = {
+            'node%d_kWh' % node_id: hist.realcounter,
+            'node%d_bat' % node_id: last_bat,
+        }
+        self.UpdateRRD(last_ts, **kwargs)
 
       hist.realcounter += self.CalculateStep(ping_id, counter, last_counter,
           last_ping, len(parts))
@@ -215,7 +228,11 @@ class RRDUpdater(object):
       hist.start_counter = counter
     hist.lastline = parts
     hist.last_ts = ts
-    self.UpdateRRD(ts, kWh=hist.realcounter, bat=bat)
+    kwargs = {
+        'node%d_kWh' % node_id: hist.realcounter,
+        'node%d_bat' % node_id: bat,
+    }
+    self.UpdateRRD(hist.last_ts, **kwargs)
     if ts - hist.start_ts > 3600:
       usage = hist.realcounter - hist.start_counter
       print 'Kwh from %s til %s: %.02fkWh' % (
@@ -230,9 +247,8 @@ class RRDUpdater(object):
       time.ctime(hist.first_ts), time.ctime(hist.last_ts), usage*6/1000.0)
 
 def main():
-  global latest_update
   if len(sys.argv) < 2:
-    sys.stderr.write('Usage: %s rrd_file logfile1 [logfile2, ...]\n' %
+    sys.stderr.write('Usage: %s rrd_dir logfile1 [logfile2, ...]\n' %
         sys.argv[0])
     sys.exit(1)
   
