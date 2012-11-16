@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# vim: set fileencoding=utf8
 # 
 # Copyright (C) 2012 - Matt Brown
 #
@@ -35,16 +36,71 @@ NODE_HANDLERS = {
     4: 'ProcessTempSensor',
 }
 
+def ParseLong(parts, offset):
+  val = 0
+  for byte in xrange(0, 4):
+    val += int(parts[offset+byte]) << (8*byte)
+  return val
+
+def ParseFloat(parts, offset):
+  d = ''
+  for byte in xrange(0, 4):
+    d += chr(int(parts[offset+byte]))
+  return struct.unpack('<f', d)[0]
+
+def FormatHour(hour):
+  return '%s-%s-%s %s:00' % (hour[:4], hour[4:6], hour[6:8], hour[8:])
+
+
 class History(object):
 
   def __init__(self):
+    # Common attributes.
+    self.last_ts = 0
+    self.last_ping_id = 0
+    self.num_reports = 0
+    self.received_reports = 0
+    self.gaps = []
+    # Meter Reader attributes.
     self.first_count = 0
     self.first_ts = 0
-    self.last_ts = 0
-    self.start_ts = 0
-    self.start_counter = 0
+    self.hour_counter = 0
     self.realcount = 0
     self.lastline = None
+    # Temp Sensor attributes.
+    self.temps = []
+
+
+class Report(object):
+
+  def __init__(self, line, debug):
+    self.valid = False
+    parts = line.strip().split(' ')
+    if len(parts) < 8:
+      if debug:
+        print 'Skipping bad line: %s' % line.strip()
+      return
+    if parts[1] != 'OK':
+      if debug:
+        print 'Skipping invalid line: %s' % line.strip()
+      return
+    try:
+      self.ts = float(parts[0])
+      self.node_id = int(parts[2])
+      self.ping_id = ParseLong(parts, 3)
+    except ValueError, e:
+      if debug:
+        print 'Skipping invalid line: %s' % line.strip(), e
+      return
+    self.parts = parts[8:]
+    t = time.gmtime(self.ts)
+    self.hour = '%04d%02d%02d%02d' % (t.tm_year, t.tm_mon, t.tm_mday,
+        t.tm_hour)
+    self.valid = True
+
+  def __str__(self):
+    return '%d@%d (%d): %s' % (self.node_id, self.ts, self.ping_id,
+        ' '.join(self.parts))
 
 class RRDUpdater(object):
 
@@ -57,6 +113,7 @@ class RRDUpdater(object):
     self.latest_update = {}
     self.history = {}
     self.current_line = None
+    self.current_hour = None
 
   def CheckOrCreateRRDs(self):
     if not os.path.exists(self.RRDForDs('foo_bat')):
@@ -81,36 +138,20 @@ class RRDUpdater(object):
           RRA_ALL, RRA_5)
     print 'Created new RRD %s' % rrdfile
 
-  def ParseLong(self, parts, offset):
-    val = 0
-    for byte in xrange(0, 4):
-      val += int(parts[offset+byte]) << (8*byte)
-    return val
-
-  def ParseFloat(self, parts, offset):
-    d = ''
-    for byte in xrange(0, 4):
-      d += chr(int(parts[offset+byte]))
-    return struct.unpack('<f', d)
-
   def ParseMeterLine(self, parts):
-    ts = float(parts[0])
-    ping_id = self.ParseLong(parts, 3)
-    bat = int(parts[8])
-    if len(parts) == 10:
+    bat = int(parts[0])
+    if len(parts) == 2:
       # Old format, single byte counter.
-      counter = int(parts[9])
-    elif len(parts) >= 13:
+      counter = int(parts[1])
+    elif len(parts) >= 5:
       # New format, long counter.
-      counter = self.ParseLong(parts, 9)
-    return ts, ping_id, counter, bat
+      counter = ParseLong(parts, 1)
+    return counter, bat
 
   def ParseTempSensorLine(self, parts):
-    ts = float(parts[0])
-    ping_id = self.ParseLong(parts, 3)
-    bat = int(parts[8])
-    temp = self.ParseFloat(parts, 9)
-    return ts, ping_id, temp, bat
+    bat = int(parts[0])
+    temp = ParseFloat(parts, 1)
+    return temp, bat
 
   def RRDForDs(self, ds):
     if ds.endswith('bat'):
@@ -162,35 +203,93 @@ class RRDUpdater(object):
       self.history[node_id] = History()
     return self.history[node_id]
 
+  def UpdateNodeReport(self, report):
+    hist = self.GetOrCreateNodeHistory(report.node_id)
+    if hist.last_ts > 0:
+      if (int(hist.last_ts/3600)*3600) == (int(report.ts/3600)*3600):
+        hist.gaps.append(report.ts - hist.last_ts)
+      if report.ping_id > (hist.last_ping_id + 1):
+        hist.num_reports += report.ping_id - hist.last_ping_id
+    hist.num_reports += 1
+    hist.received_reports += 1
+    # Store state for future.
+    hist.last_ping_id = report.ping_id
+    hist.last_ts = report.ts
+
+  def CalcHourlyAverageAndReset(self, node_id, hist, just):
+    a = '% 2d: ' % node_id
+    if NODE_HANDLERS[node_id] == 'ProcessMeterReader':
+      usage = hist.realcounter - hist.hour_counter
+      hist.hour_counter = hist.realcounter
+      a += '%.02fkWh' % (usage*6/1000.0)
+    elif NODE_HANDLERS[node_id] == 'ProcessTempSensor':
+      if len(hist.temps) > 0:
+        a += '%.02f°C' % (sum(hist.temps) / len(hist.temps))
+        just += 1  # degree confuses ljust... sigh.
+      hist.temps = []
+    hist.num_reports = 0
+    hist.received_reports = 0
+    hist.gaps = []
+    return a.ljust(just)
+
+  def PrintHourlyReport(self):
+    reliability = []
+    averages = []
+    for node_id in sorted(NODE_HANDLERS.keys()):
+      hist = self.GetOrCreateNodeHistory(node_id)
+      health = freq = '   NaN'
+      if hist.num_reports > 0:
+        health = '% 5d%%' % int(
+            float(hist.received_reports) / float(hist.num_reports) * 100.0)
+        if len(hist.gaps) > 0:
+          freq = '% 5ds' % (sum(hist.gaps) / float(len(hist.gaps)))
+      debug = ''
+      if self.debug:
+        debug = ' (% 3d/% 3d)' % (hist.received_reports, hist.num_reports)
+      t = '% 2d:%s @%s%s' % (node_id, health, freq, debug)
+      reliability.append(t)
+      averages.append(self.CalcHourlyAverageAndReset(node_id, hist, len(t)))
+    hour = FormatHour(self.current_hour)
+    print '%s: Reports : %s' % (hour, ' '.join(reliability))
+    print '%s: Averages: %s' % (hour, ' '.join(averages))
+
   def ProcessFiles(self, files):
     self.CheckOrCreateRRDs()
     for filename in files:
       for line in open(filename, 'r'):
-        self.current_line = line.strip()
-        parts = line.strip().split(' ')
-        if len(parts) < 3:
+        self.current_line = line
+        report = Report(line, self.debug)
+        if not report.valid:
           continue
-        if parts[1] != 'OK':
-          continue
-        node_id = int(parts[2])
-        handler = getattr(self, NODE_HANDLERS.get(node_id, 'IgnoreLine'))
-        handler(node_id, parts)
+        if self.current_hour and report.hour != self.current_hour:
+          self.PrintHourlyReport()
+        self.current_hour = report.hour
+        # Handle the line depending on the node type.
+        handler = getattr(self,
+            NODE_HANDLERS.get(report.node_id, 'IgnoreLine'))
+        handler(report)
+        # Keep stats about node report reliability every hour.
+        self.UpdateNodeReport(report)
+    # Make sure the last report gets flushed.
     self.FlushUpdateQueue()
 
-  def IgnoreLine(self, node_id, parts):
-    print 'Ignoring line "%s"' % ' '.join(parts)
+  def IgnoreLine(self, report):
+    if self.debug:
+      print 'Ignoring report ', report
 
-  def ProcessTempSensor(self, node_id, parts):
+  def ProcessTempSensor(self, report):
     try:
-      ts, ping_id, temp, bat = self.ParseTempSensorLine(parts)
+      temp, bat = self.ParseTempSensorLine(report.parts)
     except Exception, e:
-      print 'Ignoring line "%s"' % ' '.join(parts), e
+      print 'Ignoring bad temp report ', report, e
       return
+    hist = self.GetOrCreateNodeHistory(report.node_id)
+    hist.temps.append(temp)
     data = {
-        'node%d_temp' % node_id: temp,
-        'node%d_bat' % node_id: bat,
+        'node%d_temp' % report.node_id: temp,
+        'node%d_bat' % report.node_id: bat,
     }
-    self.UpdateRRD(ts, data)
+    self.UpdateRRD(report.ts, data)
 
   def CalculateStep(self, ping_id, counter, last_counter, last_ping, len_parts):
     if ping_id == 1 or counter < last_counter:
@@ -213,7 +312,7 @@ class RRDUpdater(object):
     # Might be a wrap... Check if last counter value was high.
     if counter == 0:
       # Handle wrap with old-style byte counter.
-      if len_parts < 13:
+      if len_parts < 5:
         if last_counter > ((2*8)*0.9):
           return 6
 
@@ -227,14 +326,15 @@ class RRDUpdater(object):
     # Simple case last. Just trust the report.
     return counter - last_counter
 
-  def ProcessMeterReader(self, node_id, parts):
+  def ProcessMeterReader(self, report):
     try:
-      ts, ping_id, counter, bat = self.ParseMeterLine(parts)
-    except:
+      counter, bat = self.ParseMeterLine(report.parts)
+    except Exception, e:
+      print 'Ignoring bad meter report ', report, e
       return
-    hist = self.GetOrCreateNodeHistory(node_id)
+    hist = self.GetOrCreateNodeHistory(report.node_id)
     if hist.lastline:
-      last_ts, last_ping, last_counter, last_bat = self.ParseMeterLine(hist.lastline)
+      last_counter, last_bat = self.ParseMeterLine(hist.lastline)
       # I think this causes more harm than good now, since battery/temp
       # measurements from other sensors can move the rrd ts past what we try to
       # synthesize. Meter Reader should be reporting frequently enough for this
@@ -249,27 +349,19 @@ class RRDUpdater(object):
       #  }
       #  self.UpdateRRD(last_ts, data)
 
-      hist.realcounter += self.CalculateStep(ping_id, counter, last_counter,
-          last_ping, len(parts))
+      hist.realcounter += self.CalculateStep(report.ping_id, counter, last_counter,
+          hist.last_ping_id, len(report.parts))
     else:
       hist.realcounter = counter
       hist.first_count = counter
-      hist.start_ts = ts
-      hist.first_ts = ts
-      hist.start_counter = counter
-    hist.lastline = parts
-    hist.last_ts = ts
+      hist.first_ts = report.ts
+      hist.hour_counter = counter
+    hist.lastline = report.parts
     data = {
-        'node%d_kWh' % node_id: hist.realcounter,
-        'node%d_bat' % node_id: bat,
+        'node%d_kWh' % report.node_id: hist.realcounter,
+        'node%d_bat' % report.node_id: bat,
     }
-    self.UpdateRRD(hist.last_ts, data)
-    if ts - hist.start_ts > 3600:
-      usage = hist.realcounter - hist.start_counter
-      print 'Kwh from %s til %s: %.02fkWh' % (
-        time.ctime(hist.start_ts), time.ctime(ts), usage*6/1000.0)
-      hist.start_ts = ts
-      hist.start_counter = hist.realcounter
+    self.UpdateRRD(report.ts, data)
 
   def PrintMeterSummary(self):
     hist = self.GetOrCreateNodeHistory(1)
