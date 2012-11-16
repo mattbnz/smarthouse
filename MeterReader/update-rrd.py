@@ -15,6 +15,7 @@
 #    LINE1:mv#ff0000:Voltage && eog /tmp/test.png
 #
 # Reads logger.py output and generates rrd updates.
+import argparse
 import os
 import rrdtool
 import struct
@@ -47,8 +48,10 @@ class History(object):
 
 class RRDUpdater(object):
 
-  def __init__(self, rrd_dir):
+  def __init__(self, rrd_dir, update_rrds, debug=False):
     self.rrd_dir = rrd_dir
+    self.update_rrds = update_rrds
+    self.debug = debug
     self.update_ts = None
     self.update_queue = {}
     self.latest_update = {}
@@ -71,10 +74,11 @@ class RRDUpdater(object):
         continue
       data_sources.append('DS:node%d_%s:%s' % (
         node_id, suffix, ds_type))
-    rrdtool.create(rrdfile,
-        '--start', str(START_TS), '--step', '300',
-        data_sources,
-        RRA_ALL, RRA_5)
+    if self.update_rrds:
+      rrdtool.create(rrdfile,
+          '--start', str(START_TS), '--step', '300',
+          data_sources,
+          RRA_ALL, RRA_5)
     print 'Created new RRD %s' % rrdfile
 
   def ParseLong(self, parts, offset):
@@ -130,17 +134,25 @@ class RRDUpdater(object):
       files[rrd][ds] = val
     for rrd, data in files.iteritems():
       if self.update_ts < self.LastUpdateFor(rrd):
+        if self.debug:
+          print 'ignoring update for %s, too old' % rrd, data
         continue
       keys = data.keys()
       datastr = ':'.join(['%s' % data[k] for k in keys])
       try:
-        rrdtool.update(rrd, '-t', ':'.join(keys),
-            '%s:%s' % (int(self.update_ts), datastr))
+        if self.update_rrds:
+          rrdtool.update(rrd, '-t', ':'.join(keys),
+              '%s:%s' % (int(self.update_ts), datastr))
+        elif self.debug:
+          print ('rrdtool update -t', ':'.join(keys),
+              '%s:%s' % (int(self.update_ts), datastr))
       except rrdtool.error, e:
         print e, 'from', self.update_queue, 'at', self.current_line
     self.update_queue = {}
 
   def LastUpdateFor(self, rrd):
+    if not self.update_rrds and not os.path.exists(rrd):
+      return 0
     if rrd not in self.latest_update:
       self.latest_update[rrd] = rrdtool.last(rrd)
     return self.latest_update[rrd]
@@ -266,13 +278,15 @@ class RRDUpdater(object):
       time.ctime(hist.first_ts), time.ctime(hist.last_ts), usage*6/1000.0)
 
 def main():
-  if len(sys.argv) < 2:
-    sys.stderr.write('Usage: %s rrd_dir logfile1 [logfile2, ...]\n' %
-        sys.argv[0])
-    sys.exit(1)
-  
-  updater = RRDUpdater(sys.argv[1])
-  updater.ProcessFiles(sys.argv[2:])
+  parser = argparse.ArgumentParser(description='Update the RRDs')
+  parser.add_argument('--dry_run', action='store_true', dest='dry_run')
+  parser.add_argument('--debug', action='store_true', dest='debug')
+  parser.add_argument('rrd_dir')
+  parser.add_argument('log_files', nargs='*')
+  args = parser.parse_args()
+
+  updater = RRDUpdater(args.rrd_dir, not args.dry_run, args.debug)
+  updater.ProcessFiles(args.log_files)
   updater.PrintMeterSummary()
 
 if __name__ == "__main__":
