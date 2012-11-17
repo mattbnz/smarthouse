@@ -18,16 +18,16 @@ for hours in 4 12 24 48 168; do
 	rrdtool graph $GRAPHDIR/power-${hours}h.png \
 		--start end-${hours}h --lower-limit 0 \
 		--title "Electrical Power Usage" \
-		DEF:power=${LOGDIR}/power.rrd:node1_kWh:AVERAGE \
+		DEF:power=${LOGDIR}/node1_kWh.rrd:node1_kWh:AVERAGE \
 		--vertical-label Watts --width 800 --height 600 \
 		CDEF:watts=power,21600,\* LINE1:watts#ff0000:Power
 
 	rrdtool graph $GRAPHDIR/battery-${hours}h.png \
 		--start end-${hours}h --lower-limit 0 --title "Battery voltage" \
-        DEF:node1=${LOGDIR}/bat.rrd:node1_bat:AVERAGE \
-        DEF:node2=${LOGDIR}/bat.rrd:node2_bat:AVERAGE \
-        DEF:node3=${LOGDIR}/bat.rrd:node3_bat:AVERAGE \
-        DEF:node4=${LOGDIR}/bat.rrd:node4_bat:AVERAGE \
+        DEF:node1=${LOGDIR}/node1_bat.rrd:node1_bat:AVERAGE \
+        DEF:node2=${LOGDIR}/node2_bat.rrd:node2_bat:AVERAGE \
+        DEF:node3=${LOGDIR}/node3_bat.rrd:node3_bat:AVERAGE \
+        DEF:node4=${LOGDIR}/node4_bat.rrd:node4_bat:AVERAGE \
         --vertical-label mV --width 800 --height 600 \
         CDEF:mv1=node1,50,\+,20,\* CDEF:mv2=node2,50,\+,20,\* \
         CDEF:mv3=node3,50,\+,20,\* CDEF:mv4=node4,50,\+,20,\* \
@@ -36,9 +36,9 @@ for hours in 4 12 24 48 168; do
 
     rrdtool graph $GRAPHDIR/temp-${hours}h.png \
         --start end-${hours}h --lower-limit 0 --title "Temperature" \
-        DEF:lounge=/${LOGDIR}/temp.rrd:node2_temp:AVERAGE \
-        DEF:outside=${LOGDIR}/temp.rrd:node3_temp:AVERAGE \
-        DEF:bedroom=${LOGDIR}/temp.rrd:node4_temp:AVERAGE \
+        DEF:lounge=/${LOGDIR}/node2_temp.rrd:node2_temp:AVERAGE \
+        DEF:outside=${LOGDIR}/node3_temp.rrd:node3_temp:AVERAGE \
+        DEF:bedroom=${LOGDIR}/node4_temp.rrd:node4_temp:AVERAGE \
         --vertical-label DegC --width 800 --height 600 \
         LINE1:outside#ff0000:Outside LINE1:lounge#00ff00:Lounge \
         LINE1:bedroom#0000ff:Bedroom

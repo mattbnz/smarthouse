@@ -106,6 +106,7 @@ class RRDUpdater(object):
 
   def __init__(self, rrd_dir, update_rrds, debug=False):
     self.rrd_dir = rrd_dir
+    self.rrds = []
     self.update_rrds = update_rrds
     self.debug = debug
     self.update_ts = None
@@ -115,27 +116,32 @@ class RRDUpdater(object):
     self.current_line = None
     self.current_hour = None
 
-  def CheckOrCreateRRDs(self):
-    if not os.path.exists(self.RRDForDs('foo_bat')):
-      self.CreateRRD('bat')
-    if not os.path.exists(self.RRDForDs('foo_temp')):
-      self.CreateRRD('temp', 'ProcessTempSensor')
-    if not os.path.exists(self.RRDForDs('power')):
-      self.CreateRRD('kWh', 'ProcessMeterReader', 'COUNTER:300:U:U')
+  def CheckOrCreateRRD(self, ds):
+    rrd = self.RRDForDs(ds)
+    if rrd in self.rrds:
+      return
+    if not os.path.exists(self.RRDForDs(ds)):
+      self.CreateRRD(ds)
+    else:
+      self.rrds.append(rrd)
     
-  def CreateRRD(self, suffix, only_handler=None, ds_type='GAUGE:3600:0:255'):
-    rrdfile = self.RRDForDs('foo_%s' % suffix)
-    data_sources = []
-    for node_id, node_handler in NODE_HANDLERS.iteritems():
-      if only_handler and node_handler != only_handler:
-        continue
-      data_sources.append('DS:node%d_%s:%s' % (
-        node_id, suffix, ds_type))
+  def CreateRRD(self, ds):
+    if ds.endswith('bat') or ds.endswith('temp'):
+      ds_type = 'GAUGE:3600:0:255'
+    else:
+      ds_type = 'COUNTER:300:U:U'
+    rrdfile = self.RRDForDs(ds)
     if self.update_rrds:
-      rrdtool.create(rrdfile,
-          '--start', str(START_TS), '--step', '300',
-          data_sources,
-          RRA_ALL, RRA_5)
+      try:
+        rrdtool.create(rrdfile,
+            '--start', str(START_TS), '--step', '300',
+            ['DS:%s:%s' % (ds, ds_type)],
+            RRA_ALL, RRA_5)
+      except rrdtool.error, e:
+        sys.stderr.write('ERROR: Could not create rrd %s for %s: %s\n' %
+            (rrdfile, ds, e))
+        sys.exit(1)
+    self.rrds.append(rrdfile)
     print 'Created new RRD %s' % rrdfile
 
   def ParseMeterLine(self, parts):
@@ -154,11 +160,7 @@ class RRDUpdater(object):
     return temp, bat
 
   def RRDForDs(self, ds):
-    if ds.endswith('bat'):
-      return os.path.join(self.rrd_dir, 'bat.rrd')
-    if ds.endswith('temp'):
-      return os.path.join(self.rrd_dir, 'temp.rrd')
-    return os.path.join(self.rrd_dir, 'power.rrd')
+    return os.path.join(self.rrd_dir, '%s.rrd' % ds)
 
   def UpdateRRD(self, ts, updates):
     if self.update_ts and self.update_ts != ts:
@@ -170,6 +172,7 @@ class RRDUpdater(object):
   def FlushUpdateQueue(self):
     files = {}
     for ds, val in self.update_queue.iteritems():
+      self.CheckOrCreateRRD(ds)
       rrd = self.RRDForDs(ds)
       files.setdefault(rrd, {})
       files[rrd][ds] = val
@@ -254,7 +257,6 @@ class RRDUpdater(object):
     print '%s: Averages: %s' % (hour, ' '.join(averages))
 
   def ProcessFiles(self, files):
-    self.CheckOrCreateRRDs()
     for filename in files:
       for line in open(filename, 'r'):
         self.current_line = line
