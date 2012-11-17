@@ -16,7 +16,7 @@
 #    LINE1:mv#ff0000:Voltage && eog /tmp/test.png
 #
 # Reads logger.py output and generates rrd updates.
-import argparse
+import optparse
 import os
 import rrdtool
 import struct
@@ -370,15 +370,17 @@ class RRDUpdater(object):
       time.ctime(hist.first_ts), time.ctime(hist.last_ts), usage*6/1000.0)
 
 def main():
-  parser = argparse.ArgumentParser(description='Update the RRDs')
-  parser.add_argument('--dry_run', action='store_true', dest='dry_run')
-  parser.add_argument('--debug', action='store_true', dest='debug')
-  parser.add_argument('rrd_dir')
-  parser.add_argument('log_files', nargs='*')
-  args = parser.parse_args()
+  parser = optparse.OptionParser()
+  parser.add_option('--dry_run', action='store_true', dest='dry_run')
+  parser.add_option('--debug', action='store_true', dest='debug')
+  options, args = parser.parse_args()
+  if len(args) < 2:
+    sys.stderr.write('Usage: %s [--dry_run] [--debug] rrd_dir '
+    'logfile1 [logfile2, ...]\n' % sys.argv[0])
+    sys.exit(1)
 
-  updater = RRDUpdater(args.rrd_dir, not args.dry_run, args.debug)
-  updater.ProcessFiles(args.log_files)
+  updater = RRDUpdater(args[0], not options.dry_run, options.debug)
+  updater.ProcessFiles(args[1:])
   updater.PrintMeterSummary()
 
 if __name__ == "__main__":
