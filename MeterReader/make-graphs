@@ -11,6 +11,21 @@ if [ -z "$GRAPHDIR" -o -z "$LOGDIR" -o -z "$HOSTPORT" ]; then
     exit 1
 fi
 
+function calc_delta() {
+    report=$1
+    now=$(date +%s)
+    let delta=now-report
+    if [[ $delta -le 120 ]]; then
+        echo "$delta seconds ago"
+    elif [[ $delta -le 3600 ]]; then
+        let mins=delta/60
+        echo "$mins minutes ago"
+    else
+        let hours=delta/3600
+        echo "$hours hours ago"
+    fi
+}
+
 subst_file=""
 do_subst=0
 if [ -e "$GRAPHDIR/index.tmpl" ]; then
@@ -81,6 +96,12 @@ if [ $do_subst == 1 ]; then
             CDEF:v=node,50,\+,20,\*,1000,\/ \
             PRINT:v:LAST:%.2lf | tail -n1)
         sed -i "s/#node${n}_battery#/$value/" "$subst_file"
+        # Last report time.
+        value=$(rrdtool last ${LOGDIR}/node${n}_bat.rrd)
+        str=$(date --date="1970-01-01 ${value}sec")
+        delta=$(calc_delta $value)
+        sed -i "s/#node${n}_last_report#/$str/" "$subst_file"
+        sed -i "s/#node${n}_last_report_delta#/$delta/" "$subst_file"
         # Current Temperatures
         value=$(rrdtool graph /dev/null \
             DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:LAST \
@@ -101,5 +122,6 @@ if [ $do_subst == 1 ]; then
         sed -i "s/#node${n}_24h_avg#/$value/" "$subst_file"
 
     done
+    sed -i "s/#generation_time#/$(date)/" "$subst_file"
     mv "$subst_file" "${subst_file/.new/}"
 fi
