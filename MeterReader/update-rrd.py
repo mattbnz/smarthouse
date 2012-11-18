@@ -25,8 +25,12 @@ import sys
 import time
 
 START_TS = 1351378113
-RRA_ALL = 'RRA:AVERAGE:0.9:1:2628000'
+RRA_LAST = 'RRA:LAST:0.9:1:2628000'
 RRA_5 = 'RRA:AVERAGE:0.9:5:525600'
+RRA_24H_MIN = 'RRA:MIN:0.9:288:1825'
+RRA_24H_MAX = 'RRA:MAX:0.9:288:1825'
+RRA_24H_AVG = 'RRA:AVERAGE:0.9:288:1825'
+RRAS = (RRA_LAST, RRA_5, RRA_24H_MIN, RRA_24H_MAX, RRA_24H_AVG)
 POWER_STEP_SIZE = 60
 
 NODE_HANDLERS = {
@@ -136,7 +140,7 @@ class RRDUpdater(object):
         rrdtool.create(rrdfile,
             '--start', str(START_TS), '--step', '300',
             ['DS:%s:%s' % (ds, ds_type)],
-            RRA_ALL, RRA_5)
+            *RRAS)
       except rrdtool.error, e:
         sys.stderr.write('ERROR: Could not create rrd %s for %s: %s\n' %
             (rrdfile, ds, e))

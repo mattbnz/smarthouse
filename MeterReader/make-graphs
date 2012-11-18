@@ -8,6 +8,14 @@ if [ -z "$GRAPHDIR" -o -z "$LOGDIR" -o -z "$HOSTPORT" ]; then
     exit 1
 fi
 
+subst_file=""
+do_subst=0
+if [ -e "$GRAPHDIR/index.tmpl" ]; then
+    subst_file="$GRAPHDIR/index.html.new"
+    cp "$GRAPHDIR/index.tmpl" "$subst_file"
+    do_subst=1
+fi
+
 n=$(date +%Y%m%d%H)
 curl http://$HOSTPORT/$n.log > $LOGDIR/$n.log
 
@@ -25,6 +33,19 @@ for hours in 4 12 24 48 168; do
 		DEF:revs=${LOGDIR}/node1_revs.rrd:node1_revs:AVERAGE \
 		--vertical-label Watts --width 800 --height 600 \
 		CDEF:watts=revs,21600,\* LINE1:watts#ff0000:Power
+    if [ $do_subst == 1 ]; then
+        # Calculate total kWH usage shown on the graph, substitute if
+        # requested.  Similar to above, multiply revs by 6, to get
+        # instantaneous Wh use, then divide by 1k to get kWh and use the built
+        # in TOTAL functionality to combine the instantaneous measurements
+        # together.
+        total=$(rrdtool graph /dev/null --start end-${hours}h \
+            DEF:revs=${LOGDIR}/node1_revs.rrd:node1_revs:AVERAGE \
+            CDEF:kWh=revs,6,\*,1000,\/ \
+            VDEF:total_kWh=kWh,TOTAL \
+            PRINT:total_kWh:%.2lf | tail -n1)
+        sed -i "s/#total_kWh_${hours}h#/$total/" "$subst_file"
+    fi
 
 	rrdtool graph $GRAPHDIR/battery-${hours}h.png \
 		--start end-${hours}h --lower-limit 0 --title "Battery voltage" \
@@ -47,3 +68,35 @@ for hours in 4 12 24 48 168; do
         LINE1:outside#ff0000:Outside LINE1:lounge#00ff00:Lounge \
         LINE1:bedroom#0000ff:Bedroom
 done
+
+if [ $do_subst == 1 ]; then
+    # Per node stats
+    for n in $(seq 1 4); do
+        # Battery Status
+        value=$(rrdtool graph /dev/null \
+            DEF:node=${LOGDIR}/node${n}_bat.rrd:node${n}_bat:LAST \
+            CDEF:v=node,50,\+,20,\*,1000,\/ \
+            PRINT:v:LAST:%.2lf | tail -n1)
+        sed -i "s/#node${n}_battery#/$value/" "$subst_file"
+        # Current Temperatures
+        value=$(rrdtool graph /dev/null \
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:LAST \
+            PRINT:temp:LAST:%.2lf | tail -n1)
+        sed -i "s/#node${n}_temp#/$value/" "$subst_file"
+        # 24hr min/max/avg Temperatures
+        value=$(rrdtool graph /dev/null --start end-24h \
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:MIN \
+            PRINT:temp:LAST:%.2lf | tail -n1)
+        sed -i "s/#node${n}_24h_min#/$value/" "$subst_file"
+        value=$(rrdtool graph /dev/null --start end-24h \
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:MAX \
+            PRINT:temp:LAST:%.2lf | tail -n1)
+        sed -i "s/#node${n}_24h_max#/$value/" "$subst_file"
+        value=$(rrdtool graph /dev/null --start end-24h \
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:AVERAGE \
+            PRINT:temp:LAST:%.2lf | tail -n1)
+        sed -i "s/#node${n}_24h_avg#/$value/" "$subst_file"
+
+    done
+    mv "$subst_file" "${subst_file/.new/}"
+fi
