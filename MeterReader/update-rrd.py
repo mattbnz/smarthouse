@@ -25,10 +25,11 @@ import sys
 import time
 
 START_TS = 1351378113
-RRA_LAST = 'RRA:LAST:0.9:1:2628000'
-RRA_5 = 'RRA:AVERAGE:0.9:5:525600'
-RRAS = (RRA_LAST, RRA_5)
-POWER_STEP_SIZE = 60
+# Assuming 60s step size.
+RRA_LAST = 'RRA:LAST:0.9:1:2628000'    # 5 years of exact measurements.
+RRA_5 = 'RRA:AVERAGE:0.9:5:1051200'    # 10 years of 5min averages.
+RRA_60 = 'RRA:AVERAGE:0.9:60:87600'    # 10 years of 1hr averages.
+RRAS = (RRA_LAST, RRA_5, RRA_60)
 
 NODE_HANDLERS = {
     1: 'ProcessMeterReader',
@@ -135,7 +136,7 @@ class RRDUpdater(object):
     if self.update_rrds:
       try:
         rrdtool.create(rrdfile,
-            '--start', str(START_TS), '--step', '300',
+            '--start', str(START_TS), '--step', '60',
             ['DS:%s:%s' % (ds, ds_type)],
             *RRAS)
       except rrdtool.error, e:
@@ -340,20 +341,6 @@ class RRDUpdater(object):
     hist = self.GetOrCreateNodeHistory(report.node_id)
     if hist.lastline:
       last_counter, last_bat = self.ParseMeterLine(hist.lastline)
-      # I think this causes more harm than good now, since battery/temp
-      # measurements from other sensors can move the rrd ts past what we try to
-      # synthesize. Meter Reader should be reporting frequently enough for this
-      # not to be required anymore. Can deal with crappy gaps from the first
-      # few days when this was useful.
-      #while last_ts < (ts - (POWER_STEP_SIZE + 1)):
-      #  # Make sure rrd gets data as often as it needs.
-      #  last_ts += POWER_STEP_SIZE
-      #  data = {
-      #      'node%d_revs' % node_id: hist.realcounter,
-      #      'node%d_bat' % node_id: last_bat,
-      #  }
-      #  self.UpdateRRD(last_ts, data)
-
       hist.realcounter += self.CalculateStep(report.ping_id, counter, last_counter,
           hist.last_ping_id, len(report.parts))
     else:
