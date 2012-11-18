@@ -109,16 +109,19 @@ if [ $do_subst == 1 ]; then
         sed -i "s/#node${n}_temp#/$value/" "$subst_file"
         # 24hr min/max/avg Temperatures
         value=$(rrdtool graph /dev/null --start end-24h \
-            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:MIN \
-            PRINT:temp:LAST:%.2lf | tail -n1)
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:LAST \
+            VDEF:min=temp,MINIMUM \
+            PRINT:min:%.2lf | tail -n1)
         sed -i "s/#node${n}_24h_min#/$value/" "$subst_file"
         value=$(rrdtool graph /dev/null --start end-24h \
-            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:MAX \
-            PRINT:temp:LAST:%.2lf | tail -n1)
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:LAST \
+            VDEF:max=temp,MAXIMUM \
+            PRINT:max:%.2lf | tail -n1)
         sed -i "s/#node${n}_24h_max#/$value/" "$subst_file"
         value=$(rrdtool graph /dev/null --start end-24h \
-            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:AVERAGE \
-            PRINT:temp:LAST:%.2lf | tail -n1)
+            DEF:temp=${LOGDIR}/node${n}_temp.rrd:node${n}_temp:LAST \
+            VDEF:avg=temp,AVERAGE \
+            PRINT:avg:%.2lf | tail -n1)
         sed -i "s/#node${n}_24h_avg#/$value/" "$subst_file"
 
     done
