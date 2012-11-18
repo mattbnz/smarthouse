@@ -286,6 +286,8 @@ class RRDUpdater(object):
   def ProcessTempSensor(self, report):
     try:
       temp, bat = self.ParseTempSensorLine(report.parts)
+      if temp > 40.0:
+        raise RuntimeError('Temp too high to be believable!')
     except Exception, e:
       print 'Ignoring bad temp report ', report, e
       return
