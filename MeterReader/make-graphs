@@ -3,6 +3,9 @@ GRAPHDIR="$1"
 LOGDIR="$2"
 HOSTPORT="$3"
 
+GRAPH_W=500
+GRAPH_H=300
+
 if [ -z "$GRAPHDIR" -o -z "$LOGDIR" -o -z "$HOSTPORT" ]; then
     echo "Usage: $0 graph_dir log_dir hostport"
     exit 1
@@ -19,7 +22,7 @@ for hours in 4 12 24 48 168; do
 		--start end-${hours}h --lower-limit 0 \
 		--title "Electrical Power Usage" \
 		DEF:power=${LOGDIR}/node1_kWh.rrd:node1_kWh:AVERAGE \
-		--vertical-label Watts --width 800 --height 600 \
+		--vertical-label Watts --width $GRAPH_W --height $GRAPH_H \
 		CDEF:watts=power,21600,\* LINE1:watts#ff0000:Power
 
 	rrdtool graph $GRAPHDIR/battery-${hours}h.png \
@@ -28,7 +31,7 @@ for hours in 4 12 24 48 168; do
         DEF:node2=${LOGDIR}/node2_bat.rrd:node2_bat:AVERAGE \
         DEF:node3=${LOGDIR}/node3_bat.rrd:node3_bat:AVERAGE \
         DEF:node4=${LOGDIR}/node4_bat.rrd:node4_bat:AVERAGE \
-        --vertical-label mV --width 800 --height 600 \
+        --vertical-label mV --width $GRAPH_W --height $GRAPH_H \
         CDEF:mv1=node1,50,\+,20,\* CDEF:mv2=node2,50,\+,20,\* \
         CDEF:mv3=node3,50,\+,20,\* CDEF:mv4=node4,50,\+,20,\* \
         LINE1:mv1#ff0000:PowerMeter LINE1:mv2#00ff00:Node2 \
@@ -39,7 +42,7 @@ for hours in 4 12 24 48 168; do
         DEF:lounge=/${LOGDIR}/node2_temp.rrd:node2_temp:AVERAGE \
         DEF:outside=${LOGDIR}/node3_temp.rrd:node3_temp:AVERAGE \
         DEF:bedroom=${LOGDIR}/node4_temp.rrd:node4_temp:AVERAGE \
-        --vertical-label DegC --width 800 --height 600 \
+        --vertical-label DegC --width $GRAPH_W --height $GRAPH_H \
         LINE1:outside#ff0000:Outside LINE1:lounge#00ff00:Lounge \
         LINE1:bedroom#0000ff:Bedroom
 done
