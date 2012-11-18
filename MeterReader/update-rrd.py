@@ -346,7 +346,7 @@ class RRDUpdater(object):
       #  # Make sure rrd gets data as often as it needs.
       #  last_ts += POWER_STEP_SIZE
       #  data = {
-      #      'node%d_kWh' % node_id: hist.realcounter,
+      #      'node%d_revs' % node_id: hist.realcounter,
       #      'node%d_bat' % node_id: last_bat,
       #  }
       #  self.UpdateRRD(last_ts, data)
@@ -360,7 +360,7 @@ class RRDUpdater(object):
       hist.hour_counter = counter
     hist.lastline = report.parts
     data = {
-        'node%d_kWh' % report.node_id: hist.realcounter,
+        'node%d_revs' % report.node_id: hist.realcounter,
         'node%d_bat' % report.node_id: bat,
     }
     self.UpdateRRD(report.ts, data)

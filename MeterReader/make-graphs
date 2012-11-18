@@ -15,12 +15,16 @@ basedir=$(dirname "$0")
 $basedir/update-rrd.py $LOGDIR $LOGDIR/*.log
 
 for hours in 4 12 24 48 168; do
+    # Meter does 166 and 2/3 revs per kWh == 6Wh per rev.
+    # 21600 = 6 (Wh per rev) * 3600 (hour). revs coming out of the RRD is the
+    # instantaneous rate at each time period, so multiplying by 21600 should
+    # give instantaneous Wh use at each point.
 	rrdtool graph $GRAPHDIR/power-${hours}h.png \
 		--start end-${hours}h --lower-limit 0 \
 		--title "Electrical Power Usage" \
-		DEF:power=${LOGDIR}/node1_kWh.rrd:node1_kWh:AVERAGE \
+		DEF:revs=${LOGDIR}/node1_revs.rrd:node1_revs:AVERAGE \
 		--vertical-label Watts --width 800 --height 600 \
-		CDEF:watts=power,21600,\* LINE1:watts#ff0000:Power
+		CDEF:watts=revs,21600,\* LINE1:watts#ff0000:Power
 
 	rrdtool graph $GRAPHDIR/battery-${hours}h.png \
 		--start end-${hours}h --lower-limit 0 --title "Battery voltage" \
