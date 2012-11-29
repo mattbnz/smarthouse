@@ -129,7 +129,7 @@ class RRDUpdater(object):
     
   def CreateRRD(self, ds):
     if ds.endswith('bat') or ds.endswith('temp'):
-      ds_type = 'GAUGE:3600:0:255'
+      ds_type = 'GAUGE:3600:-50:255'
     else:
       ds_type = 'COUNTER:300:U:U'
     rrdfile = self.RRDForDs(ds)
