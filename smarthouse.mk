@@ -12,7 +12,7 @@ PARSE_BOARD = $(ARDUINO_DIR)/ard-parse-boards --boards_txt=$(BOARDS_TXT)
 include /usr/share/arduino/Arduino.mk
 
 JEE_PORT=$(shell ls -1 /dev/ttyUSB? | sort | head -n1)
-MEGA_PORT=$(ls -1 /dev/ttyACM? | sort | head -n1)
+MEGA_PORT=$(shell ls -1 /dev/ttyACM? | sort | head -n1)
 
 jee_upload:
 	BOARD_TAG=uno ARDUINO_PORT=$(JEE_PORT) $(MAKE) upload
