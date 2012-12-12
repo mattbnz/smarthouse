@@ -36,6 +36,7 @@ NODE_HANDLERS = {
     2: 'ProcessTempSensor',
     3: 'ProcessTempSensor',
     4: 'ProcessTempSensor',
+    5: 'ProcessTempSensor',
 }
 
 def ParseLong(parts, offset):

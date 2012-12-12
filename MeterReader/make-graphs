@@ -71,25 +71,29 @@ for hours in 4 12 24 48 168; do
         DEF:node2=${LOGDIR}/node2_bat.rrd:node2_bat:AVERAGE \
         DEF:node3=${LOGDIR}/node3_bat.rrd:node3_bat:AVERAGE \
         DEF:node4=${LOGDIR}/node4_bat.rrd:node4_bat:AVERAGE \
+        DEF:node5=${LOGDIR}/node5_bat.rrd:node5_bat:AVERAGE \
         --vertical-label mV --width $GRAPH_W --height $GRAPH_H \
         CDEF:mv1=node1,50,\+,20,\* CDEF:mv2=node2,50,\+,20,\* \
         CDEF:mv3=node3,50,\+,20,\* CDEF:mv4=node4,50,\+,20,\* \
+        CDEF:mv5=node5,50,\+,20,\* \
         LINE1:mv1#ff0000:PowerMeter LINE1:mv2#00ff00:Node2 \
-        LINE1:mv3#0000ff:Node3 LINE1:mv4#ff8c00:Node4
+        LINE1:mv3#0000ff:Node3 LINE1:mv4#ff8c00:Node4 \
+        LINE1:mv4#00ffff:Node5
 
     rrdtool graph $GRAPHDIR/temp-${hours}h.png \
         --start end-${hours}h --lower-limit 0 --title "Temperature" \
         DEF:lounge=/${LOGDIR}/node2_temp.rrd:node2_temp:AVERAGE \
         DEF:outside=${LOGDIR}/node3_temp.rrd:node3_temp:AVERAGE \
         DEF:bedroom=${LOGDIR}/node4_temp.rrd:node4_temp:AVERAGE \
+        DEF:kitchen=${LOGDIR}/node5_temp.rrd:node5_temp:AVERAGE \
         --vertical-label DegC --width $GRAPH_W --height $GRAPH_H \
         LINE1:outside#ff0000:Outside LINE1:lounge#00ff00:Lounge \
-        LINE1:bedroom#0000ff:Bedroom
+        LINE1:bedroom#0000ff:Bedroom LINE1:kitchen#ff8c00:Kitchen
 done
 
 if [ $do_subst == 1 ]; then
     # Per node stats
-    for n in $(seq 1 4); do
+    for n in $(seq 1 5); do
         # Battery Status
         value=$(rrdtool graph /dev/null \
             DEF:node=${LOGDIR}/node${n}_bat.rrd:node${n}_bat:LAST \
