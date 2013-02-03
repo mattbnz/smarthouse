@@ -35,7 +35,7 @@ int create_logfile(struct logfile* log, time_t now) {
     }
     syslog(LOG_INFO, "Creating new logfile for %lld at %s", (long long)now,
            path);
-    log->fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0640);
+    log->fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     if (log->fd == -1) {
         syslog(LOG_CRIT, "Failed to open new logfile: %s", path);
         return 0;
