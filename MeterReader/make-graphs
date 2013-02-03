@@ -40,7 +40,7 @@ curl http://$HOSTPORT/$n.log > $LOGDIR/$n.log
 basedir=$(dirname "$0")
 $basedir/update-rrd.py $LOGDIR $LOGDIR/*.log
 
-for hours in 4 12 24 48 168; do
+for hours in 4 12 24 48 168 336 672; do
     # Meter does 166 and 2/3 revs per kWh == 6Wh per rev.
     # 21600 = 6 (Wh per rev) * 3600 (hour). revs coming out of the RRD is the
     # instantaneous rate at each time period, so multiplying by 21600 should
