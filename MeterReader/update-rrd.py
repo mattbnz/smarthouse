@@ -334,6 +334,8 @@ class RRDUpdater(object):
         self.UpdateNodeReport(report)
     # Make sure the last report gets flushed.
     self.FlushUpdateQueue()
+    # Print an update.
+    self.PrintHourlyReport()
     # Save history
     self.SaveHistory()
 
