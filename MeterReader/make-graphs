@@ -38,7 +38,8 @@ n=$(date +%Y%m%d%H)
 curl http://$HOSTPORT/$n.log > $LOGDIR/$n.log
 
 basedir=$(dirname "$0")
-$basedir/update-rrd.py $LOGDIR $LOGDIR/*.log
+$basedir/update-rrd.py --history_file $LOGDIR/history.pickle \
+    $LOGDIR $LOGDIR/*.log
 
 for hours in 4 12 24 48 168 336 672; do
     # Meter does 166 and 2/3 revs per kWh == 6Wh per rev.
