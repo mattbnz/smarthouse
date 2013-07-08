@@ -16,6 +16,7 @@
 #    LINE1:mv#ff0000:Voltage && eog /tmp/test.png
 #
 # Reads logger.py output and generates rrd updates.
+import cPickle as pickle
 import optparse
 import os
 import rrdtool
@@ -106,19 +107,53 @@ class Report(object):
     return '%d@%d (%d): %s' % (self.node_id, self.ts, self.ping_id,
         ' '.join(self.parts))
 
-class RRDUpdater(object):
 
-  def __init__(self, rrd_dir, update_rrds, debug=False):
-    self.rrd_dir = rrd_dir
-    self.rrds = []
-    self.update_rrds = update_rrds
-    self.debug = debug
-    self.update_ts = None
-    self.update_queue = {}
+class RRDUpdaterHistory(object):
+  """Stores the history for what has been processed to date."""
+
+  def __init__(self):
     self.latest_update = {}
     self.node_state = {}
-    self.current_line = None
     self.current_hour = None
+    self.current_file = None
+    self.current_file_lineno = None
+
+
+class RRDUpdater(object):
+  """Updates RRDs based on a directory of logfiles."""
+
+  def __init__(self, rrd_dir, history_file, dry_run, debug=False):
+    # self.history must be defined first to avoid infinite loop in setattr.
+    self.rrd_dir = rrd_dir
+    self.rrds = []
+    self.dry_run = dry_run
+    self.debug = debug
+    self.current_line = None
+    self.update_ts = None
+    self.update_queue = {}
+    self.history_file = history_file
+    if history_file and os.path.exists(history_file):
+      self.history = pickle.load(file(history_file, 'rb'))
+      print 'Loaded history from %s. Current Hour: %s. Processing %s@%s' % (
+          history_file, self.current_hour, self.current_file,
+          self.current_file_lineno)
+    else:
+      self.history = RRDUpdaterHistory()
+
+  def __getattr__(self, name):
+    """Delegate to the history object for any attributes it defines."""
+    history = self.__dict__.get('history', None)
+    if not hasattr(history, name):
+      raise AttributeError
+    return getattr(history, name)
+
+  def __setattr__(self, name, value):
+    """Save to the history object for any attributes it defines."""
+    history = self.__dict__.get('history', None)
+    if hasattr(history, name):
+      setattr(history, name, value)
+    else:
+      self.__dict__[name] = value
 
   def CheckOrCreateRRD(self, ds):
     rrd = self.RRDForDs(ds)
@@ -135,7 +170,7 @@ class RRDUpdater(object):
     else:
       ds_type = 'COUNTER:300:U:U'
     rrdfile = self.RRDForDs(ds)
-    if self.update_rrds:
+    if not self.dry_run:
       try:
         rrdtool.create(rrdfile,
             '--start', str(START_TS), '--step', '60',
@@ -188,7 +223,7 @@ class RRDUpdater(object):
       keys = data.keys()
       datastr = ':'.join(['%s' % data[k] for k in keys])
       try:
-        if self.update_rrds:
+        if not self.dry_run:
           rrdtool.update(rrd, '-t', ':'.join(keys),
               '%s:%s' % (int(self.update_ts), datastr))
         elif self.debug:
@@ -198,8 +233,17 @@ class RRDUpdater(object):
         print e, 'from', self.update_queue, 'at', self.current_line
     self.update_queue = {}
 
+  def SaveHistory(self):
+    if self.dry_run or not self.history_file:
+      return True
+    fp = open('%s.tmp' % self.history_file, 'wb')
+    pickle.dump(self.history, fp, pickle.HIGHEST_PROTOCOL)
+    fp.close()
+    os.rename('%s.tmp' % self.history_file, self.history_file)
+    print 'History saved to %s' % self.history_file
+
   def LastUpdateFor(self, rrd):
-    if not self.update_rrds and not os.path.exists(rrd):
+    if self.dry_run and not os.path.exists(rrd):
       return 0
     if rrd not in self.latest_update:
       self.latest_update[rrd] = rrdtool.last(rrd)
@@ -261,8 +305,20 @@ class RRDUpdater(object):
     print '%s: Averages: %s' % (hour, ' '.join(averages))
 
   def ProcessFiles(self, files):
+    hist_file = self.current_file
+    hist_lineno = self.current_file_lineno
     for filename in files:
-      for line in open(filename, 'r'):
+      basename = os.path.basename(filename)
+      if hist_file and basename < hist_file:
+        #print 'Skipping %s, already processed' % basename
+        continue
+      self.current_file = basename
+      for lineno, line in enumerate(open(filename, 'r')):
+        if hist_file == self.current_file:
+          if lineno <= hist_lineno:
+            #print 'Skipping line %d in %s, already processed' % (lineno, basename)
+            continue
+        self.current_file_lineno = lineno
         self.current_line = line
         report = Report(line, self.debug)
         if not report.valid:
@@ -278,6 +334,8 @@ class RRDUpdater(object):
         self.UpdateNodeReport(report)
     # Make sure the last report gets flushed.
     self.FlushUpdateQueue()
+    # Save history
+    self.SaveHistory()
 
   def IgnoreLine(self, report):
     if self.debug:
@@ -367,13 +425,15 @@ def main():
   parser = optparse.OptionParser()
   parser.add_option('--dry_run', action='store_true', dest='dry_run')
   parser.add_option('--debug', action='store_true', dest='debug')
+  parser.add_option('--history_file', action='store', dest='history_file')
   options, args = parser.parse_args()
   if len(args) < 2:
-    sys.stderr.write('Usage: %s [--dry_run] [--debug] rrd_dir '
-    'logfile1 [logfile2, ...]\n' % sys.argv[0])
+    sys.stderr.write('Usage: %s [--dry_run] [--debug] [--history_file foo] '
+        'rrd_dir logfile1 [logfile2, ...]\n' % sys.argv[0])
     sys.exit(1)
 
-  updater = RRDUpdater(args[0], not options.dry_run, options.debug)
+  updater = RRDUpdater(args[0], options.history_file, options.dry_run,
+      options.debug)
   updater.ProcessFiles(args[1:])
   updater.PrintMeterSummary()
 
