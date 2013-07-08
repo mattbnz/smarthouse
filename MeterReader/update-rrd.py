@@ -55,7 +55,8 @@ def FormatHour(hour):
   return '%s-%s-%s %s:00' % (hour[:4], hour[4:6], hour[6:8], hour[8:])
 
 
-class History(object):
+class NodeState(object):
+  """Stores the current state and statistics for an individual node.""" 
 
   def __init__(self):
     # Common attributes.
@@ -115,7 +116,7 @@ class RRDUpdater(object):
     self.update_ts = None
     self.update_queue = {}
     self.latest_update = {}
-    self.history = {}
+    self.node_state = {}
     self.current_line = None
     self.current_hour = None
 
@@ -204,57 +205,57 @@ class RRDUpdater(object):
       self.latest_update[rrd] = rrdtool.last(rrd)
     return self.latest_update[rrd]
 
-  def GetOrCreateNodeHistory(self, node_id):
-    if node_id not in self.history:
-      self.history[node_id] = History()
-    return self.history[node_id]
+  def GetOrCreateNodeState(self, node_id):
+    if node_id not in self.node_state:
+      self.node_state[node_id] = NodeState()
+    return self.node_state[node_id]
 
   def UpdateNodeReport(self, report):
-    hist = self.GetOrCreateNodeHistory(report.node_id)
-    if hist.last_ts > 0:
-      if (int(hist.last_ts/3600)*3600) == (int(report.ts/3600)*3600):
-        hist.gaps.append(report.ts - hist.last_ts)
-      if report.ping_id > (hist.last_ping_id + 1):
-        hist.num_reports += report.ping_id - hist.last_ping_id
-    hist.num_reports += 1
-    hist.received_reports += 1
+    state = self.GetOrCreateNodeState(report.node_id)
+    if state.last_ts > 0:
+      if (int(state.last_ts/3600)*3600) == (int(report.ts/3600)*3600):
+        state.gaps.append(report.ts - state.last_ts)
+      if report.ping_id > (state.last_ping_id + 1):
+        state.num_reports += report.ping_id - state.last_ping_id
+    state.num_reports += 1
+    state.received_reports += 1
     # Store state for future.
-    hist.last_ping_id = report.ping_id
-    hist.last_ts = report.ts
+    state.last_ping_id = report.ping_id
+    state.last_ts = report.ts
 
-  def CalcHourlyAverageAndReset(self, node_id, hist, just):
+  def CalcHourlyAverageAndReset(self, node_id, state, just):
     a = '% 2d: ' % node_id
     if NODE_HANDLERS[node_id] == 'ProcessMeterReader':
-      usage = hist.realcounter - hist.hour_counter
-      hist.hour_counter = hist.realcounter
+      usage = state.realcounter - state.hour_counter
+      state.hour_counter = state.realcounter
       a += '%.02fkWh' % (usage*6/1000.0)
     elif NODE_HANDLERS[node_id] == 'ProcessTempSensor':
-      if len(hist.temps) > 0:
-        a += '%.02f°C' % (sum(hist.temps) / len(hist.temps))
+      if len(state.temps) > 0:
+        a += '%.02f°C' % (sum(state.temps) / len(state.temps))
         just += 1  # degree confuses ljust... sigh.
-      hist.temps = []
-    hist.num_reports = 0
-    hist.received_reports = 0
-    hist.gaps = []
+      state.temps = []
+    state.num_reports = 0
+    state.received_reports = 0
+    state.gaps = []
     return a.ljust(just)
 
   def PrintHourlyReport(self):
     reliability = []
     averages = []
     for node_id in sorted(NODE_HANDLERS.keys()):
-      hist = self.GetOrCreateNodeHistory(node_id)
+      state = self.GetOrCreateNodeState(node_id)
       health = freq = '   NaN'
-      if hist.num_reports > 0:
+      if state.num_reports > 0:
         health = '% 5d%%' % int(
-            float(hist.received_reports) / float(hist.num_reports) * 100.0)
-        if len(hist.gaps) > 0:
-          freq = '% 5ds' % (sum(hist.gaps) / float(len(hist.gaps)))
+            float(state.received_reports) / float(state.num_reports) * 100.0)
+        if len(state.gaps) > 0:
+          freq = '% 5ds' % (sum(state.gaps) / float(len(state.gaps)))
       debug = ''
       if self.debug:
-        debug = ' (% 3d/% 3d)' % (hist.received_reports, hist.num_reports)
+        debug = ' (% 3d/% 3d)' % (state.received_reports, state.num_reports)
       t = '% 2d:%s @%s%s' % (node_id, health, freq, debug)
       reliability.append(t)
-      averages.append(self.CalcHourlyAverageAndReset(node_id, hist, len(t)))
+      averages.append(self.CalcHourlyAverageAndReset(node_id, state, len(t)))
     hour = FormatHour(self.current_hour)
     print '%s: Reports : %s' % (hour, ' '.join(reliability))
     print '%s: Averages: %s' % (hour, ' '.join(averages))
@@ -290,8 +291,8 @@ class RRDUpdater(object):
     except Exception, e:
       print 'Ignoring bad temp report ', report, e
       return
-    hist = self.GetOrCreateNodeHistory(report.node_id)
-    hist.temps.append(temp)
+    state = self.GetOrCreateNodeState(report.node_id)
+    state.temps.append(temp)
     data = {
         'node%d_temp' % report.node_id: temp,
         'node%d_bat' % report.node_id: bat,
@@ -339,28 +340,28 @@ class RRDUpdater(object):
     except Exception, e:
       print 'Ignoring bad meter report ', report, e
       return
-    hist = self.GetOrCreateNodeHistory(report.node_id)
-    if hist.lastline:
-      last_counter, last_bat = self.ParseMeterLine(hist.lastline)
-      hist.realcounter += self.CalculateStep(report.ping_id, counter, last_counter,
-          hist.last_ping_id, len(report.parts))
+    state = self.GetOrCreateNodeState(report.node_id)
+    if state.lastline:
+      last_counter, last_bat = self.ParseMeterLine(state.lastline)
+      state.realcounter += self.CalculateStep(report.ping_id, counter,
+          last_counter, state.last_ping_id, len(report.parts))
     else:
-      hist.realcounter = counter
-      hist.first_count = counter
-      hist.first_ts = report.ts
-      hist.hour_counter = counter
-    hist.lastline = report.parts
+      state.realcounter = counter
+      state.first_count = counter
+      state.first_ts = report.ts
+      state.hour_counter = counter
+    state.lastline = report.parts
     data = {
-        'node%d_revs' % report.node_id: hist.realcounter,
+        'node%d_revs' % report.node_id: state.realcounter,
         'node%d_bat' % report.node_id: bat,
     }
     self.UpdateRRD(report.ts, data)
 
   def PrintMeterSummary(self):
-    hist = self.GetOrCreateNodeHistory(1)
-    usage = hist.realcounter - hist.first_count
+    state = self.GetOrCreateNodeState(1)
+    usage = state.realcounter - state.first_count
     print 'Kwh from %s til %s: %.02fkWh' % (
-      time.ctime(hist.first_ts), time.ctime(hist.last_ts), usage*6/1000.0)
+      time.ctime(state.first_ts), time.ctime(state.last_ts), usage*6/1000.0)
 
 def main():
   parser = optparse.OptionParser()
