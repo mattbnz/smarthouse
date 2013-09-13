@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Checks that smarthouse RRDs have been updated recently.
+#
+# Author:   Matt Brown <matt@mattb.net.nz>
+#
+# Licensed under the GPLv2.
+RRDTOOL="/usr/bin/rrdtool"
+VERBOSE=0
+
+if [ "$1" == "-v" ]; then
+    VERBOSE=1
+    shift
+fi
+
+DATA_DIR="$1"
+WARN_THRESHOLD="$2"
+ERR_THRESHOLD="$3"
+
+function debug() {
+  if [ "$VERBOSE" -eq "1" ]; then
+      echo $1
+  fi
+}
+
+NOW=$(date +%s)
+most_recent=0
+
+for rrdfile in $DATA_DIR/*.rrd; do
+    if [ ! -e "$rrdfile" ]; then
+        continue
+    fi
+    last_update=$($RRDTOOL last $rrdfile)
+    let diff=NOW-last_update
+    debug "$rrdfile last updated $diff seconds ago ($last_update)"
+    if [ "$most_recent" -eq 0 -o "$diff" -lt "$most_recent" ]; then
+        most_recent=$diff
+    fi
+done
+
+# Check for failure
+msg="RRDs in $1 updated $most_recent seconds ago."
+if [ "$most_recent" -gt "$ERR_THRESHOLD" ]; then
+    echo "CRITICAL - $msg"
+    exit 2
+fi
+if [ "$most_recent" -gt "$WARN_THRESHOLD" ]; then
+    echo "WARNING - $msg"
+    exit 1
+fi
+
+echo "OK - $msg"
+exit 0
