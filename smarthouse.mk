@@ -1,13 +1,15 @@
 # Arduino makefile.
 #
 # Assumes you have the arduino-mk .deb installed.
-ARDUINO_DIR = /usr/share/arduino
+ARDUINO_DIR   = /usr/share/arduino
+ARDMK_DIR     = /usr
+AVR_TOOLS_DIR = /usr
 
 DIR=$(shell pwd)
 TARGET = $(shell basename $(DIR))
 
-BOARDS_TXT  = $(ARDUINO_DIR)/hardware/arduino/boards.txt
-PARSE_BOARD = $(ARDUINO_DIR)/ard-parse-boards --boards_txt=$(BOARDS_TXT)
+#BOARDS_TXT  = $(ARDUINO_DIR)/hardware/arduino/boards.txt
+#PARSE_BOARD = $(ARDUINO_DIR)/ard-parse-boards --boards_txt=$(BOARDS_TXT)
 
 include /usr/share/arduino/Arduino.mk
 
