@@ -7,6 +7,9 @@
 // Uses an HC-SR04 ultrasonic sensor to measure the height of the water level
 // in a water tank.
 //
+// Depends on the HC-SR04 Ultrasonic library from
+// http://freecode.com/projects/hc-sr04-ultrasonic-arduino-library
+//
 #define __AVR_LIBC_DEPRECATED_ENABLE__ 1
 #include <Ultrasonic.h>
 
@@ -58,10 +61,9 @@ float takeMeasurement() {
 void loop() {
   float cm = takeMeasurement();
   if (cm != BAD_MEASUREMENT) {
-    Serial.print("Distance: ");
     Serial.println(cm);
   }
-  delay(1000);
+  delay(60 * 1000);
 }
 
 // Vim modeline
