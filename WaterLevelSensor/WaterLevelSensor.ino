@@ -20,12 +20,15 @@
 
 #define MAX_DEV 0.50       // Maximum stddev in cm of an allowable measurement.
 #define THRESH 0.02
+#define UPDATE_MS 60000
 
 Ultrasonic ultrasonic(TRIGGER_PIN, ECHO_PIN);
+unsigned long last_measurement = 0;
 
 void setup() {
   Serial.begin(57600);
   ultrasonic.setDivisor(34.6, Ultrasonic::CM);
+  last_measurement = 0;
 }
 
 float takeMeasurement() {
@@ -59,11 +62,16 @@ float takeMeasurement() {
 }
    
 void loop() {
-  float cm = takeMeasurement();
-  if (cm != BAD_MEASUREMENT) {
-    Serial.println(cm);
+  unsigned long now = millis();
+  if (last_measurement == 0 || (unsigned long)(now - last_measurement) >= UPDATE_MS) {
+    float cm = takeMeasurement();
+    if (cm != BAD_MEASUREMENT) {
+      Serial.println(cm);
+    }
+    last_measurement = now;
+  } else {
+    delay(1000);
   }
-  delay(60 * 1000);
 }
 
 // Vim modeline
