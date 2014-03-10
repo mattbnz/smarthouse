@@ -26,7 +26,7 @@ class Logfile(object):
 
 def CreateLogfile(log, now):
   now = time.gmtime()
-  path = os.path.join(log.logdir, time.strftime('%Y%m%d%H', now))
+  path = os.path.join(log.logdir, time.strftime('%Y%m%d%H.log', now))
   syslog.syslog('Creating new logfile for %d at %s' % (calendar.timegm(now), path))
   log.fd = open(path, 'a')
   log.expires_at = calendar.timegm(now) + (59 - now.tm_sec) + (60 * (59 - now.tm_min))
