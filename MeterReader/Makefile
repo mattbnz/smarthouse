@@ -1,7 +1,8 @@
 # Assumes you have the arduino-mk .deb installed.
 ARDUINO_LIBS = Jeelib OneWire DallasTemp
+OPENWRT_TOOLCHAIN = /home/matt/openwrt/OpenWrt-Toolchain-ar71xx-for-mips_r2-gcc-4.3.3+cs_uClibc-0.9.30.1/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1/usr/bin
 
 include ../smarthouse.mk
 
 jeelogger.mips: jeelogger.c
-	CC=mips-openwrt-linux-uclibc-gcc LD=mips-openwrt-linux-uclibc-ld mips-openwrt-linux-uclibc-gcc jeelogger.c -o jeelogger.mips -static
+	CC=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-gcc LD=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-ld $(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-gcc jeelogger.c -o jeelogger.mips -static

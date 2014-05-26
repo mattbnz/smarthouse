@@ -78,11 +78,17 @@ int main(int argc, char **argv) {
     options.c_cflag |= (CLOCAL | CREAD);
     tcsetattr(fd, TCSANOW, &options);
 
-    // Tell the Jeelink to display help (with config info at the bottom) and
-    // enter quiet mode (don't report corrupted packets).
-    int n = write(fd, "h\r1 q\r", 6);
+    // Configure the Jeelink
+    int n = write(fd, "26 i\r8 b\r5 g\r", 13);
     if (n < 0) {
-        syslog(LOG_CRIT, "Failed to write initial commands");
+        syslog(LOG_CRIT, "Failed to configure JeeLink!");
+        return 2;
+    }
+    // Display the help (to assist with verifying config settings), then
+    // enter quiet mode (don't report corrupted packets).
+    n = write(fd, "h\r1 q\r", 6);
+    if (n < 0) {
+        syslog(LOG_CRIT, "Failed to verify config and enter quiet mode!");
         return 2;
     }
 
