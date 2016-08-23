@@ -1,0 +1,26 @@
+#!/bin/bash
+GRAPHDIR="$1"
+LOGDIR="$2"
+
+GRAPH_W=500
+GRAPH_H=300
+
+if [ -z "$GRAPHDIR" -o -z "$LOGDIR" ]; then
+    echo "Usage: $0 graph_dir log_dir"
+    exit 1
+fi
+
+basedir=$(dirname "$0")
+$basedir/update-rrd.py --history_file $LOGDIR/history.pickle \
+    $LOGDIR $LOGDIR/*.log
+
+
+for time in 4h 12h 24h 2d 7d 30d 60d 180d 365d; do
+    # Ballcock was 3817, based on depth measurements.
+    rrdtool graph $GRAPHDIR/level-${time}.png --start end-${time} \
+	--lower-limit 0 --title "Water Tank State" \
+	DEF:litres=$LOGDIR/tank_litres.rrd:tank_litres:AVERAGE \
+	--vertical-label "Litres" --width 800 --height 600 \
+	LINE2:litres#0000ff:Litres LINE1:17565#00ff00:Full \
+	LINE1:3200#ff0000:Ballcock
+done

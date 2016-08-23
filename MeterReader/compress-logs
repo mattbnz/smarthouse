@@ -1,0 +1,15 @@
+#!/bin/bash
+LOGDIR="$1"
+MONTH="$2"
+
+if [ -z "$LOGDIR" ]; then
+    echo "Usage: $0 log_dir [month]"
+    exit 1
+fi
+
+if [ -z "$MONTH" ]; then
+    MONTH=$(date --date="last month" +%Y%m)
+fi
+cd $LOGDIR
+tar -cjf archived-$MONTH.tar.bz2 $MONTH*
+rm $MONTH*
