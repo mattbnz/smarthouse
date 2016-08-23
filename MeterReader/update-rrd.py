@@ -53,7 +53,10 @@ def ParseFloat(parts, offset):
   return struct.unpack('<f', d)[0]
 
 def FormatHour(hour):
-  return '%s-%s-%s %s:00' % (hour[:4], hour[4:6], hour[6:8], hour[8:])
+  if hour:
+    return '%s-%s-%s %s:00' % (hour[:4], hour[4:6], hour[6:8], hour[8:])
+  else:
+    return ''
 
 
 class NodeState(object):
@@ -70,7 +73,7 @@ class NodeState(object):
     self.first_count = 0
     self.first_ts = 0
     self.hour_counter = 0
-    self.realcount = 0
+    self.realcounter = 0
     self.lastline = None
     # Temp Sensor attributes.
     self.temps = []
