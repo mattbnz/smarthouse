@@ -1,0 +1,1 @@
+avrdude -v -c buspirate -P /dev/ttyUSB0 -p t84 -U lock:w:0xff:m -U efuse:w:0xff:m -U hfuse:w:0xdd:m -U lfuse:w:0xff:m -U flash:w:build-cli/FlashLED.hex
