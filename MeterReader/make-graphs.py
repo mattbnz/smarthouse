@@ -100,7 +100,7 @@ def TemperatureGraph(hours, nodes, graph_dir, rrd_dir):
 
 def UpdateTemplate(graph_dir, nodes):
   data = {
-      'now': time.time(),
+      'now': time.strftime('%Y-%m-%d %H:%M:%S %Z'),
       'nodes': nodes,
       'timesince': timesince,
   }
