@@ -28,11 +28,6 @@ def timesince(d):
   else:
     return '%d hours ago' % (delta/3600)
 
-def LastValue(rrd_filename):
-  _, _, values = rrdtool.fetch(rrd_filename, 'LAST')
-  values = [ v[0] for v in values if v[0] is not None ]
-  if values: return values[-1]
-
 
 def DailyValue(rrd_filename, val_name, CF):
   args = ('x', '-s', 'now-24h', '-e', 'now',
@@ -53,9 +48,9 @@ def LoadConfig(rrd_dir):
       d = {'type':node_type, 'desc':description}
       # Extract battery and other state
       rrd_file = os.path.join(rrd_dir, 'node%s_bat.rrd' % node_id)
-      v = LastValue(rrd_file)
+      v = DailyValue(rrd_file, 'node%s_bat' % node_id, 'LAST')
       if v:
-        d['bat'] = (v+50)*20/1000.0
+        d['bat'] = (float(v)+50)*20/1000.0
       else:
         d['bat'] = 0.0
       last_report = rrdtool.last(rrd_file)
@@ -63,8 +58,8 @@ def LoadConfig(rrd_dir):
       d['report_delta'] = time.time() - last_report
       if node_type == 'TempSensor':
         rrd_file = os.path.join(rrd_dir, 'node%s_temp.rrd' % node_id)
-        d['temp'] = LastValue(rrd_file)
         val_name = 'node%s_temp' % node_id
+        d['temp'] = DailyValue(rrd_file, val_name, 'LAST')
         d['temp_24h_max'] = DailyValue(rrd_file, val_name, 'MAXIMUM')
         d['temp_24h_avg'] = DailyValue(rrd_file, val_name, 'AVERAGE')
         d['temp_24h_min'] = DailyValue(rrd_file, val_name, 'MINIMUM')
