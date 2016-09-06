@@ -18,4 +18,5 @@ basedir=$(dirname "$0")
 $basedir/update-rrd.py --history_file $LOGDIR/history.pickle \
     $LOGDIR $LOGDIR/*.log
 
+export TZ=Pacific/Auckland
 $basedir/make-graphs.py $LOGDIR $GRAPHDIR
