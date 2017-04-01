@@ -11,13 +11,27 @@ if [ -z "$GRAPHDIR" -o -z "$LOGDIR" -o -z "$HOSTPORT" ]; then
     exit 1
 fi
 
+function get() {
+    local hour="$1"
+    local t="$LOGDIR/.$hour.log.$$"
+    curl http://$HOSTPORT/$hour.log > "$t"
+    if [ "$?" == "0" -a -s "$t" ]; then
+        mv "$t" $LOGDIR/$hour.log
+    fi
+    rm -f "$t"
+}
+
+if [ "$(date +%M)" == "00" ]; then
+    # Last hour too
+    n=$(date -d "-1 hour" +%Y%m%d%H)
+    get $n
+fi
 n=$(date +%Y%m%d%H)
-curl http://$HOSTPORT/$n.log > $LOGDIR/$n.log
+get $n
 
 basedir=$(dirname "$0")
 $basedir/update-rrd.py --history_file $LOGDIR/history.pickle \
     $LOGDIR $LOGDIR/*.log
-
 $basedir/update-sd.py --project mattbnz-gce-test \
     --house bowenst --history_file $LOGDIR/sd-history.pickle \
     $LOGDIR/*.log
