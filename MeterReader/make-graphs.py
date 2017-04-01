@@ -16,7 +16,9 @@ import time
 HOURS = [4, 12, 24, 48, 168, 336, 672]
 GRAPH_W = 500
 GRAPH_H = 300
-COLORS = ['#ff0000', '#00ff00', '#0000ff', '#ff8c00', '#00ffff']
+COLORS = ['#4d4d4d', '#f15854', '#5da5da',
+          '#faa43a', '#60bd68', '#b276b2',
+          '#f71cb0', '#b2912f', '#decf3f']
 
 
 def timesince(d):
