@@ -7,6 +7,7 @@
 #
 # Reads logger.py output and pushes to SD
 import cPickle as pickle
+import gcloud
 from gcloud import monitoring
 import optparse
 import os
@@ -343,9 +344,11 @@ class SDUpdater(object):
       print 'POST %s' % WRITE_PATH
       print write_data
     else:
-      response = self.client.connection.api_request(
-        method='POST', path=WRITE_PATH, data=write_data)
-      pass
+      try:
+        response = self.client.connection.api_request(
+            method='POST', path=WRITE_PATH, data=write_data)
+      except gcloud.exceptions.GCloudError, e:
+        print 'Failed to write (%s:%s@%s): ' % (node_id, metric, ts), e
 
 
 def main():
