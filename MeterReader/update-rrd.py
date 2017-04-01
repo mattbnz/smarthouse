@@ -270,23 +270,24 @@ class RRDUpdater(object):
     state.last_ping_id = report.ping_id
     state.last_ts = report.ts
 
-  def CalcHourlyAverageAndReset(self, node_id, state, just):
+  def CalcHourlyAverage(self, node_id, state, just, reset):
     a = '% 2d: ' % node_id
     if NODE_HANDLERS[node_id] == 'ProcessMeterReader':
       usage = state.realcounter - state.hour_counter
-      state.hour_counter = state.realcounter
       a += '%.02fkWh' % (usage*6/1000.0)
     elif NODE_HANDLERS[node_id] == 'ProcessTempSensor':
       if len(state.temps) > 0:
         a += '%.02f°C' % (sum(state.temps) / len(state.temps))
         just += 1  # degree confuses ljust... sigh.
+    if reset:
+      state.hour_counter = state.realcounter
       state.temps = []
-    state.num_reports = 0
-    state.received_reports = 0
-    state.gaps = []
+      state.num_reports = 0
+      state.received_reports = 0
+      state.gaps = []
     return a.ljust(just)
 
-  def PrintHourlyReport(self):
+  def PrintHourlyReport(self, reset=False):
     reliability = []
     averages = []
     for node_id in sorted(NODE_HANDLERS.keys()):
@@ -302,7 +303,7 @@ class RRDUpdater(object):
         debug = ' (% 3d/% 3d)' % (state.received_reports, state.num_reports)
       t = '% 2d:%s @%s%s' % (node_id, health, freq, debug)
       reliability.append(t)
-      averages.append(self.CalcHourlyAverageAndReset(node_id, state, len(t)))
+      averages.append(self.CalcHourlyAverage(node_id, state, len(t), reset))
     hour = FormatHour(self.current_hour)
     print '%s: Reports : %s' % (hour, ' '.join(reliability))
     print '%s: Averages: %s' % (hour, ' '.join(averages))
@@ -327,7 +328,7 @@ class RRDUpdater(object):
         if not report.valid:
           continue
         if self.current_hour and report.hour != self.current_hour:
-          self.PrintHourlyReport()
+          self.PrintHourlyReport(True)
         self.current_hour = report.hour
         # Handle the line depending on the node type.
         handler = getattr(self,
@@ -338,7 +339,7 @@ class RRDUpdater(object):
     # Make sure the last report gets flushed.
     self.FlushUpdateQueue()
     # Print an update.
-    self.PrintHourlyReport()
+    self.PrintHourlyReport(False)
     # Save history
     self.SaveHistory()
 
