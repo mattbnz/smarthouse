@@ -7,6 +7,7 @@
 #
 # Generates graphs
 from mako.template import Template
+import common
 import optparse
 import os
 import rrdtool
@@ -39,15 +40,10 @@ def DailyValue(rrd_filename, val_name, CF):
   if values: return values[-1]
 
 
-def LoadConfig(rrd_dir):
-  nodes = {}
-  with open(os.path.join(rrd_dir,'config'), 'r') as fp:
-    while True:
-      line = fp.readline()
-      if not line:
-        break
-      node_id, node_type, description = line.strip().split(' ')
-      d = {'type':node_type, 'desc':description}
+def LoadNodes(rrd_dir):
+  nodes = common.LoadConfig(os.path.join(rrd_dir, 'config'))
+  for node_id, node in nodes.iteritems():
+      d= {}
       # Extract battery and other state
       rrd_file = os.path.join(rrd_dir, 'node%s_bat.rrd' % node_id)
       v = DailyValue(rrd_file, 'node%s_bat' % node_id, 'LAST')
@@ -58,14 +54,14 @@ def LoadConfig(rrd_dir):
       last_report = rrdtool.last(rrd_file)
       d['last_report'] = last_report
       d['report_delta'] = time.time() - last_report
-      if node_type == 'TempSensor':
+      if node['type'] == 'TempSensor':
         rrd_file = os.path.join(rrd_dir, 'node%s_temp.rrd' % node_id)
         val_name = 'node%s_temp' % node_id
         d['temp'] = DailyValue(rrd_file, val_name, 'LAST')
         d['temp_24h_max'] = DailyValue(rrd_file, val_name, 'MAXIMUM')
         d['temp_24h_avg'] = DailyValue(rrd_file, val_name, 'AVERAGE')
         d['temp_24h_min'] = DailyValue(rrd_file, val_name, 'MINIMUM')
-      nodes[int(node_id)] = d
+      nodes[node_id].update(d)
 
   return nodes
 
@@ -118,7 +114,7 @@ def main():
     sys.stderr.write('Usage: %s rrd_dir graph_dir\n' % sys.argv[0])
     sys.exit(1)
 
-  nodes = LoadConfig(args[0])
+  nodes = LoadNodes(args[0])
   for hour in HOURS:
     BatteryGraph(hour, nodes, args[1], args[0])
     TemperatureGraph(hour, nodes, args[1], args[0])

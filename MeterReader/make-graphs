@@ -30,11 +30,9 @@ n=$(date +%Y%m%d%H)
 get $n
 
 basedir=$(dirname "$0")
-$basedir/update-rrd.py --history_file $LOGDIR/history.pickle \
-    $LOGDIR $LOGDIR/*.log
+$basedir/update-rrd.py --state_dir $LOGDIR $LOGDIR/*.log
 $basedir/update-sd.py --project mattbnz-gce-test \
-    --house bowenst --history_file $LOGDIR/sd-history.pickle \
-    $LOGDIR/*.log
+    --house bowenst --state_dir $LOGDIR $LOGDIR/*.log
 
 export TZ=Pacific/Auckland
 $basedir/make-graphs.py $LOGDIR $GRAPHDIR
