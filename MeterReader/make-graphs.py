@@ -44,7 +44,7 @@ def LoadConfig(rrd_dir):
       line = fp.readline()
       if not line:
         break
-      node_id, node_type, description = line.split(' ')
+      node_id, node_type, description = line.strip().split(' ')
       d = {'type':node_type, 'desc':description}
       # Extract battery and other state
       rrd_file = os.path.join(rrd_dir, 'node%s_bat.rrd' % node_id)
