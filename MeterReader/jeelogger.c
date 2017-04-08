@@ -9,6 +9,8 @@
 // like the RF12demo sketch from Jeelib.
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -24,6 +26,16 @@ struct logfile {
     time_t expires_at;
     int fd;
 };
+
+struct node {
+    long seq;
+    float temp;
+    int bat;
+    time_t updated;
+};
+
+#define N_NODES 256
+struct node node_status[N_NODES];
 
 int create_logfile(struct logfile* log, time_t now) {
     struct tm* now_tm = gmtime(&now);
@@ -58,9 +70,70 @@ int check_logfile(struct logfile* log, time_t now) {
     return create_logfile(log, now);
 }
 
+void write_status(struct logfile* log, time_t now) {
+    char tmp[PATH_MAX];  // Blah blah, don't run this on insane fses.
+    char path[PATH_MAX];
+    if (sprintf((char *)&path, "%s/status", log->logdir) == -1) {
+        syslog(LOG_CRIT, "Cannot make path for status file!");
+        return;
+    }
+    if (sprintf((char *)&tmp, "%s.tmp", (char *)&path) == -1) {
+        syslog(LOG_CRIT, "Cannot make path for temp status file!");
+        return;
+    }
+    int fd = open(tmp, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+    if (fd == -1) {
+        syslog(LOG_CRIT, "Failed to open temp status file!");
+        return;
+    }
+    // Loop through the nodes for each metric.
+    for (int j=0; j<3; j++) {
+        for (int i=0; i<N_NODES; i++) {
+            // Skip nodes not heard from in 130s. Nodes report every 120s, so this
+            // gives a little bit of buffer, given the jitter in the sleep method.
+            if (now-node_status[i].updated > 130) {
+                continue;
+            }
+            char buf[256];
+            int len;
+            switch (j) {
+                case 0:
+                    len = snprintf((char *)buf, sizeof(buf), 
+                            "degrees_c{node_id=\"%d\"} %f\n", i,
+                            node_status[i].temp);
+                    break;
+                case 1:
+                    len = snprintf((char *)buf, sizeof(buf),
+                            "battery{node_id=\"%d\"} %d\n", i,
+                            node_status[i].bat);
+                    break;
+                case 2:
+                    len = snprintf((char *)buf, sizeof(buf),
+                            "ping_seq{node_id=\"%d\"} %ld\n", i,
+                            node_status[i].seq);
+                    break;
+            }
+            write(fd, buf, len);
+        }
+    }
+    close(fd);
+    // Move temp file to proper location.
+    rename(tmp, path);
+}
+
+
+int detect_be(void)
+{
+    union {
+        uint32_t i;
+        char c[4];
+    } test = {0x01020304};
+
+    return test.c[0] == 1; 
+}
+
 int process_line(struct logfile *log, char *buf, char *nl) {
     // Write to dump file.
-    printf("process_line\n");
     char ts[1024];
     time_t now = time(NULL);
     int tslen = sprintf((char *)&ts, "%lld ", (long long)now);
@@ -73,8 +146,64 @@ int process_line(struct logfile *log, char *buf, char *nl) {
     if (strncmp(buf, "OK", 2) != 0) {
         return 1;
     }
-    float t;
-    printf("float: %lu\n", sizeof(t));
+    // Make a null terminated copy and tokenize it to extract node/temp/bat.
+    char line[1024];
+    char *linep;
+    int len = (nl - buf) + 1;
+    assert(len < 1023);
+    strncpy((char *)&line, buf, len);
+    line[len+1] = '\0';
+    int n, b, p, i;
+    n = b = p = 0;
+    float t=0.0;
+    char *tp = (char *)&t;
+    char *pp = (char *)&p;
+    int is_be = detect_be();
+    for (i=0, linep=(char *)&line; ;i++, linep = NULL) {
+        char *tok = strtok(linep, " ");
+        if (tok == NULL) {
+            break;
+        }
+        switch (i) {
+            case 1:
+                n = atoi(tok);
+                break;
+            case 2:
+                *(pp + (is_be ? 3 : 0)) = (char)atoi(tok);
+               break;
+            case 3:
+                *(pp + (is_be ? 2 : 1)) = (char)atoi(tok);
+               break;
+            case 4:
+                *(pp + (is_be ? 1 : 2)) = (char)atoi(tok);
+               break;
+            case 5:
+                *(pp + (is_be ? 0 : 3)) = (char)atoi(tok);
+               break;
+            case 7:
+                b = atoi(tok);
+                break;
+            case 8:
+                *(tp + (is_be ? 3 : 0)) = (char)atoi(tok);
+                break;
+            case 9:
+                *(tp + (is_be ? 2 : 1)) = (char)atoi(tok);
+                break;
+            case 10:
+                *(tp + (is_be ? 1 : 2)) = (char)atoi(tok);
+                break;
+            case 11:
+                *(tp + (is_be ? 0 : 3)) = (char)atoi(tok);
+                break;
+        }
+    }
+    if (i == 12 && n>0 && b>0 && t!=0.0) {
+        node_status[n].seq = p;
+        node_status[n].temp = t;
+        node_status[n].bat = b;
+        node_status[n].updated = now;
+    }
+    write_status(log, now);
     return 1;
 }
 
