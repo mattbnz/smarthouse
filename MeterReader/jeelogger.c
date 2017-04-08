@@ -59,6 +59,8 @@ int check_logfile(struct logfile* log, time_t now) {
 }
 
 int process_line(struct logfile *log, char *buf, char *nl) {
+    // Write to dump file.
+    printf("process_line\n");
     char ts[1024];
     time_t now = time(NULL);
     int tslen = sprintf((char *)&ts, "%lld ", (long long)now);
@@ -67,6 +69,12 @@ int process_line(struct logfile *log, char *buf, char *nl) {
     }
     write(log->fd, &ts, tslen);
     write(log->fd, buf, (nl - buf)+1);
+    // Maintain in-memory state.
+    if (strncmp(buf, "OK", 2) != 0) {
+        return 1;
+    }
+    float t;
+    printf("float: %lu\n", sizeof(t));
     return 1;
 }
 
@@ -85,25 +93,29 @@ int main(int argc, char **argv) {
         syslog(LOG_CRIT, "Unable to open serial port %s", argv[1]);
         return 1;
     }
-    struct termios options;
-    tcgetattr(fd, &options);
-    cfsetispeed(&options, B57600);
-    cfsetospeed(&options, B57600);
-    options.c_cflag |= (CLOCAL | CREAD);
-    tcsetattr(fd, TCSANOW, &options);
+    // Set up the device. But only if it looks like we were given a device,
+    // this makes it easy to test using a plain input file.
+    if (strncmp(argv[1], "/dev/", 5) == 0) {
+        struct termios options;
+        tcgetattr(fd, &options);
+        cfsetispeed(&options, B57600);
+        cfsetospeed(&options, B57600);
+        options.c_cflag |= (CLOCAL | CREAD);
+        tcsetattr(fd, TCSANOW, &options);
 
-    // Configure the Jeelink
-    int n = write(fd, "26 i\r8 b\r5 g\r", 13);
-    if (n < 0) {
-        syslog(LOG_CRIT, "Failed to configure JeeLink!");
-        return 2;
-    }
-    // Display the help (to assist with verifying config settings), then
-    // enter quiet mode (don't report corrupted packets).
-    n = write(fd, "h\r1 q\r", 6);
-    if (n < 0) {
-        syslog(LOG_CRIT, "Failed to verify config and enter quiet mode!");
-        return 2;
+        // Configure the Jeelink
+        int n = write(fd, "26 i\r8 b\r5 g\r", 13);
+        if (n < 0) {
+            syslog(LOG_CRIT, "Failed to configure JeeLink!");
+            return 2;
+        }
+        // Display the help (to assist with verifying config settings), then
+        // enter quiet mode (don't report corrupted packets).
+        n = write(fd, "h\r1 q\r", 6);
+        if (n < 0) {
+            syslog(LOG_CRIT, "Failed to verify config and enter quiet mode!");
+            return 2;
+        }
     }
 
     // Loop reading the port, any line less than 1023 characters will be
@@ -155,6 +167,7 @@ int main(int argc, char **argv) {
         if (valid == 1) {
             rv = process_line(&log, (char *)&buf, nl);
             if (rv != 1) {
+                printf("bad line\n");
                 return rv;
             }
         }
