@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         if (n == -1) {
             syslog(LOG_ERR, "Read failed: %s", strerror(errno));
             continue;
-        } else if (n == 0) {
+        } else if (n == 0 && bufbytes == 0) {
             break;
         }
         bufp += n;
