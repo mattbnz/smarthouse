@@ -160,23 +160,24 @@ int main(int argc, char **argv) {
         bufbytes += n;
         assert(bufp <= ((char *)buf + bufsize));
         assert(bufbytes <= bufsize);
-        char *nl = memchr((char *)&buf, '\n', bufbytes);
-        if (!nl) {
-            continue;
-        }
-        if (valid == 1) {
-            rv = process_line(&log, (char *)&buf, nl);
-            if (rv != 1) {
-                printf("bad line\n");
-                return rv;
+        while (bufbytes > 0) {
+            char *nl = memchr((char *)&buf, '\n', bufbytes);
+            if (!nl) {
+                break;
             }
+            if (valid == 1) {
+                rv = process_line(&log, (char *)&buf, nl);
+                if (rv != 1) {
+                    return rv;
+                }
+            }
+            // Copy remaining buffer (after the newline) back to the start.
+            bufbytes= bufp-(nl+1);
+            memmove(&buf, nl+1, bufbytes);
+            bufp = ((char *)&buf) + bufbytes;
+            // mark as valid because this is the start of a new (maybe valid) line.
+            valid = 1;
         }
-        // Copy remaining buffer (after the newline) back to the start.
-        bufbytes= bufp-(nl+1);
-        memmove(&buf, nl+1, bufbytes);
-        bufp = ((char *)&buf) + bufbytes;
-        // mark as valid because this is the start of a new (maybe valid) line.
-        valid = 1;
     }
     close(fd);
     syslog(LOG_INFO, "Exiting");
