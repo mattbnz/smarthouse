@@ -7,6 +7,7 @@
 // Logs packets written to the serial port by the Jeelink receiving packets from
 // the Jeenode running MeterReader.ino. Assumes the Jeelink is running something
 // like the RF12demo sketch from Jeelib.
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -57,6 +58,19 @@ int check_logfile(struct logfile* log, time_t now) {
     return create_logfile(log, now);
 }
 
+int process_line(struct logfile *log, char *buf, char *nl) {
+    char ts[1024];
+    time_t now = time(NULL);
+    int tslen = sprintf((char *)&ts, "%lld ", (long long)now);
+    if (!check_logfile(log, now)) {
+        return 3;
+    }
+    write(log->fd, &ts, tslen);
+    write(log->fd, buf, (nl - buf)+1);
+    return 1;
+}
+
+
 int main(int argc, char **argv) {
     openlog("jeelogger", LOG_CONS | LOG_PID, LOG_DAEMON);
     if (argc != 3) {
@@ -92,14 +106,15 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    // Loop reading the port, storing into a buffer, writing full lines to an
-    // hourly file with a timestamp prefix when found. Assumes no lines longer
-    // than ~1k chars.  expected is <80char.
+    // Loop reading the port, any line less than 1023 characters will be
+    // written to an hourly file with a timestamp prefix when found. Lines
+    // greater than this length are ignored.
     fd_set rfds;
-    int rv;
-    char line[1024];
-    char *linep = (char *)&line;
     char buf[1024];
+    char *bufp = (char *)&buf;
+    long unsigned int bufsize = sizeof(buf);
+    int bufbytes = 0;
+    int valid = 1;
     struct logfile log;
     log.logdir = strdup(argv[2]);
     log.expires_at = -1;
@@ -108,35 +123,47 @@ int main(int argc, char **argv) {
     while (1) {
         FD_ZERO(&rfds);
         FD_SET(fd, &rfds);
-        rv = select(fd+1, &rfds, NULL, NULL, NULL);
+        int rv = select(fd+1, &rfds, NULL, NULL, NULL);
         if (!rv) {
             continue;
         }
-        n = read(fd, &buf, sizeof(buf));
-        if (n > 0) {
-            memcpy(linep, &buf, n);
-            linep += n;
+        int avail = bufsize - bufbytes;
+        if (avail == 0) {
+            // Full buffer, newline couldn't be found in it.
+            // > 1024 char lines are bogus, so drop the buffer, and keep
+            // dropping until the next newline is seen.
+            bufp = (char *)&buf;
+            bufbytes = 0;
+            avail = sizeof(buf);
+            valid = 0;
         }
-        char ts[1024];
-        time_t now = time(NULL);
-        int tslen = sprintf((char *)&ts, "%lld ", (long long)now);
-        while (1) {
-            char *p = strchr((char *)&line, '\n');
-            if (p && p < linep) {
-                if (!check_logfile(&log, now)) {
-                    return 3;
-                }
-                write(log.fd, &ts, tslen);
-                write(log.fd, &line, ((p+1) - (char *)&line));
-                int len = linep - (p+1);
-                char tmp[1024];
-                memcpy(&tmp, p+1, len);
-                memcpy(&line, &tmp, len);
-                linep = (char *)&line + len;
-            } else {
-                break;
+        int n = read(fd, bufp, avail);
+        if (n == -1) {
+            syslog(LOG_ERR, "Read failed: %s", strerror(errno));
+            continue;
+        } else if (n == 0) {
+            break;
+        }
+        bufp += n;
+        bufbytes += n;
+        assert(bufp <= ((char *)buf + bufsize));
+        assert(bufbytes <= bufsize);
+        char *nl = memchr((char *)&buf, '\n', bufbytes);
+        if (!nl) {
+            continue;
+        }
+        if (valid == 1) {
+            rv = process_line(&log, (char *)&buf, nl);
+            if (rv != 1) {
+                return rv;
             }
         }
+        // Copy remaining buffer (after the newline) back to the start.
+        bufbytes= bufp-(nl+1);
+        memmove(&buf, nl+1, bufbytes);
+        bufp = ((char *)&buf) + bufbytes;
+        // mark as valid because this is the start of a new (maybe valid) line.
+        valid = 1;
     }
     close(fd);
     syslog(LOG_INFO, "Exiting");
