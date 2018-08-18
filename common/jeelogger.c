@@ -70,20 +70,20 @@ int check_logfile(struct logfile* log, time_t now) {
     return create_logfile(log, now);
 }
 
-void write_status(struct logfile* log, time_t now) {
+void write_metrics(struct logfile* log, time_t now) {
     char tmp[PATH_MAX];  // Blah blah, don't run this on insane fses.
     char path[PATH_MAX];
-    if (sprintf((char *)&path, "%s/status", log->logdir) == -1) {
-        syslog(LOG_CRIT, "Cannot make path for status file!");
+    if (sprintf((char *)&path, "%s/metrics", log->logdir) == -1) {
+        syslog(LOG_CRIT, "Cannot make path for metrics file!");
         return;
     }
     if (sprintf((char *)&tmp, "%s.tmp", (char *)&path) == -1) {
-        syslog(LOG_CRIT, "Cannot make path for temp status file!");
+        syslog(LOG_CRIT, "Cannot make path for temp metrics file!");
         return;
     }
     int fd = open(tmp, O_WRONLY | O_TRUNC | O_CREAT, 0644);
     if (fd == -1) {
-        syslog(LOG_CRIT, "Failed to open temp status file!");
+        syslog(LOG_CRIT, "Failed to open temp metrics file!");
         return;
     }
     // Loop through the nodes for each metric.
@@ -203,7 +203,7 @@ int process_line(struct logfile *log, char *buf, char *nl) {
         node_status[n].bat = b;
         node_status[n].updated = now;
     }
-    write_status(log, now);
+    write_metrics(log, now);
     return 1;
 }
 
