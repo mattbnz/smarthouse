@@ -1,4 +1,5 @@
-OPENWRT_TOOLCHAIN = /home/matt/openwrt/OpenWrt-Toolchain-ar71xx-for-mips_r2-gcc-4.3.3+cs_uClibc-0.9.30.1/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1/usr/bin
+OPENWRT_STAGING = /home/matt/openwrt/staging_dir
+OPENWRT_TOOLCHAIN = $(OPENWRT_STAGING)/toolchain-mips_34kc_gcc-5.3.0_musl-1.1.15/bin/
 
 jeelogger.mips: jeelogger.c
-	CC=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-gcc LD=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-ld $(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-uclibc-gcc jeelogger.c -o jeelogger.mips -static
+	CC=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-gcc LD=$(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-ld $(OPENWRT_TOOLCHAIN)/mips-openwrt-linux-gcc jeelogger.c -o jeelogger.mips -static
