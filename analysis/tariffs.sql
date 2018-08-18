@@ -20,8 +20,10 @@ REPLACE INTO tariff_rate (tariff_name, cent_kwh) VALUES
 ('eco_saver_day', 20.76),
 ('eco_saver_pm_peak', 25.56),
 ('eco_saver_pm_shoulder', 18.46),
-('eco_saver_evening', 10.54)
-
+('eco_saver_evening', 10.54),
+-- Mercury EV Low User
+('mercury_low_user', '29.73'),
+('mercury_low_user_ev', '23.784')
 ;
 
 REPLACE INTO tariff (provider, half_hour_ending, export, tariff_name) VALUES
@@ -171,7 +173,56 @@ REPLACE INTO tariff (provider, half_hour_ending, export, tariff_name) VALUES
 ('ecotricity saver', '2017-06-08T22:00:00+12:00', 0, 'eco_saver_pm_shoulder'),
 ('ecotricity saver', '2017-06-08T22:30:00+12:00', 0, 'eco_saver_pm_shoulder'),
 ('ecotricity saver', '2017-06-08T23:00:00+12:00', 0, 'eco_saver_pm_shoulder'),
-('ecotricity saver', '2017-06-08T23:30:00+12:00', 0, 'eco_saver_evening')
+('ecotricity saver', '2017-06-08T23:30:00+12:00', 0, 'eco_saver_evening'),
+-- Mercury EV Low User
+('mercury EV', '2017-06-08T00:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T00:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T01:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T01:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T02:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T02:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T03:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T03:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T04:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T04:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T05:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T05:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T06:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T06:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T07:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T07:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T08:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T08:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T09:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T09:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T10:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T10:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T11:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T11:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T12:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T12:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T13:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T13:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T14:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T14:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T15:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T15:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T16:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T16:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T17:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T17:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T18:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T18:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T19:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T19:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T20:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T20:30:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T21:00:00+12:00', 0, 'mercury_low_user'),
+('mercury EV', '2017-06-08T21:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T22:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T22:30:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T23:00:00+12:00', 0, 'mercury_low_user_ev'),
+('mercury EV', '2017-06-08T23:30:00+12:00', 0, 'mercury_low_user_ev')
 
 ;
 
