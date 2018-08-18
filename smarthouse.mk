@@ -3,7 +3,6 @@
 # Assumes you have the arduino-mk .deb installed.
 ARDUINO_DIR   = /usr/share/arduino
 ARDMK_DIR     = /usr/share/arduino
-AVR_TOOLS_DIR = /usr
 
 DIR=$(shell pwd)
 TARGET = $(shell basename $(DIR))
