@@ -1,130 +1,125 @@
-// Jeenode Meter Reader.
+// Arduino Meter Reader.
 // 
-// Copyright (C) 2012 - Matt Brown
+// Copyright (C) 2017 - Matt Brown
 //
 // All rights reserved.
 //
-// Counts rotations of a Sangamo power meter using an attached LED & LDR setup.
+// Counts blinks of an LDR attached to a EDMI mk7c smart meter.
 //
-// Based on the radioBlip2 example from Jeelib, 2012-05-09 <jc@wippler.nl>.
-#include <JeeLib.h>
-#include <avr/sleep.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+// Also supports control of an attached relay for water valves.
 
-#define D_PIN 4       // Pin connected to LDR voltage divider, used for wake-up
+#define D_PIN 2       // Pin connected to LDR voltage divider, used for wake-up
                       // interrupts.
 #define L_PIN 5       // Pin connected to LED.
 #define BUS_PIN 6     // Pin connected to one-wire bus.
+#define WATER_PIN 50  // Pin connected to water relay
 
-#define NODE_ID 1
-#define NODE_GROUP 5
-#define SEND_MODE 2   // set to 3 if fuses are e=06/h=DE/l=CE, else set to 2
+unsigned int ldr_count = 0;
+unsigned long report_time = 0;
+unsigned long ldr_first_pulse = 0;
+unsigned long ldr_last_pulse = 0;
+volatile byte ldr_pulse = 0;
 
-#define REPORT_FREQ 50000 // Time between reports in ms.
+const float w_per_pulse = 1;
+const unsigned long ms_per_hour = (60 * 60 * 1000UL);
 
-volatile bool wakeupState;
-volatile bool adcDone;
-volatile unsigned long lastReport;
-
-struct {
-  long ping;  // 32-bit counter
-  byte id;    // identity, should be different for each node
-  byte vcc;  //  VCC before transmit, 1.0V = 0 .. 6.0V = 250
-  long counter;
-  float temp;
-} payload;
-
-// for low-noise/-power ADC readouts, we'll use ADC completion interrupts
-ISR(ADC_vect) { adcDone = true; }
-
-// this must be defined since we're using the watchdog for low-power waiting
-ISR(WDT_vect) { Sleepy::watchdogEvent(); }
-
-// Need this for pin interrupts
-ISR(PCINT2_vect) { wakeupState = digitalRead(D_PIN); }
-
-OneWire oneWire(BUS_PIN);
-DallasTemperature sensors(&oneWire);
-
-static byte vccRead (byte count =4) {
-  set_sleep_mode(SLEEP_MODE_ADC);
-  ADMUX = bit(REFS0) | 14; // use VCC as AREF and internal bandgap as input
-  bitSet(ADCSRA, ADIE);
-  while (count-- > 0) {
-    adcDone = false;
-    while (!adcDone)
-      sleep_mode();
-  }
-  bitClear(ADCSRA, ADIE);  
-  // convert ADC readings to fit in one byte, i.e. 20 mV steps:
-  //  1.0V = 0, 1.8V = 40, 3.3V = 115, 5.0V = 200, 6.0V = 250
-  return (55U * 1024U) / (ADC + 1) - 50;
-}
-
-static float readTemp() {
-  sensors.requestTemperatures();
-  return sensors.getTempCByIndex(0);
+void ldr_isr() {
+  ldr_pulse = 1;
 }
 
 void setup() {
-  cli();
-  CLKPR = bit(CLKPCE);
-#if defined(__AVR_ATtiny84__)
-  CLKPR = 0; // div 1, i.e. speed up to 8 MHz
-#else
-  CLKPR = 1; // div 2, i.e. slow down to 8 MHz
-#endif
-  sei();
-  rf12_initialize(NODE_ID, RF12_868MHZ, NODE_GROUP);
-  rf12_control(0xC040); // set low-battery level to 2.2V i.s.o. 3.1V
-  rf12_sleep(RF12_SLEEP);
-
-  bitSet(PCMSK2, D_PIN);
-  bitSet(PCICR, PCIE2);
-  pinMode(L_PIN, OUTPUT);
-
-  sensors.begin();
-  for (int i=0; i<sensors.getDeviceCount(); i++) {
-    DeviceAddress tmp;
-    sensors.getAddress(tmp, i);  
-    sensors.setResolution(tmp, 12);  // We like our resolution.
-  }
-
-  payload.id = NODE_ID;
-  payload.vcc = vccRead();
-  payload.temp = readTemp();
-  lastReport = 0;
+  pinMode(D_PIN, INPUT);
+  pinMode(WATER_PIN, OUTPUT);
+  digitalWrite(WATER_PIN, LOW);
+  attachInterrupt(0, ldr_isr, RISING);
+  Serial.begin(57600);
+  Serial.println("Hi");
+  report_time = millis();
 }
 
-static byte sendPayload () {
-  ++payload.ping;
-
-  rf12_sleep(RF12_WAKEUP);
-  while (!rf12_canSend())
-    rf12_recvDone();
-  rf12_sendStart(0, &payload, sizeof payload);
-  rf12_sendWait(SEND_MODE);
-  rf12_sleep(RF12_SLEEP);
+void status() {
+  int water = digitalRead(WATER_PIN);
+  char buf[1024];
+  sprintf(buf, "WATER %d", water);
+  Serial.println(buf);
 }
+
+unsigned long ldr_delta;
 
 void loop() {
-  if (!wakeupState) {
-    digitalWrite(L_PIN, 1);
-    // Went dark. Increment count.
-    payload.counter++;
-    digitalWrite(L_PIN, 0);
-  }
-  wakeupState = 1;
+  static unsigned int ldr_watts;
   unsigned long now = millis();
-  if (now - lastReport > REPORT_FREQ) {
-    // Time to send a report.
-    payload.vcc = vccRead();
-    payload.temp = readTemp();
-    sendPayload();
-    lastReport = now;
+
+  if (now - ldr_last_pulse > 60000) {
+    ldr_watts = 0;
   }
-  Sleepy::loseSomeTime((lastReport + REPORT_FREQ) - now);
+
+  if (now - report_time > 5000) {
+    ldr_delta = ldr_last_pulse - ldr_first_pulse;
+    if (ldr_delta && ldr_count) {
+      ldr_watts = (ldr_count - 1) * w_per_pulse * ms_per_hour / ldr_delta;
+      ldr_count = 0;
+    }
+
+    Serial.print(now);
+    Serial.print(" LDR ");
+    Serial.println(ldr_watts);
+    report_time = now;
+  }
+
+  if (ldr_pulse == 1) {
+    if (now - ldr_last_pulse <= 240) {
+      // Ignore any pulse recorded within 241ms of the previous pulse, as 1wh
+      // in 240ms is equivalent to 63A of current at 240V, 0.99PF, which is
+      // more than the breaker on the phase, so clearly implausible - e.g. must
+      // be a measurement error (false positive).
+      Serial.print(now);
+      Serial.print(" FP_PULSE ");
+      Serial.print(ldr_delta);
+      Serial.print(" ");
+      Serial.println(ldr_last_pulse);
+      // These seem to come in bursts (??) so sleep for half of whatever the
+      // last delta was (e.g. assume power usage stayed relatively constant) to
+      // give it time to pass. This loses accuracy (e.g. miss a legitimate
+      // pulse), but that's better than recording a bogus huge reading.
+      //delay(ldr_delta/2);
+    } else {
+      ldr_count++;
+
+      ldr_last_pulse = now;
+      if (ldr_count == 1) { // was reset
+        ldr_first_pulse = ldr_last_pulse;
+      }
+      Serial.print(now);
+      Serial.print(" PULSE ");
+      Serial.println(ldr_first_pulse);
+    }
+    ldr_pulse = 0;
+  }
+
+	int did_water = 0;
+  while (Serial.available() > 0) {
+    int cmd = Serial.read();
+    switch (cmd) {
+      case '\n':
+        // ignore newlines, used to flush line buffers.
+        break;
+			case 'S':
+				status();
+				break;
+      case 'w':
+        digitalWrite(WATER_PIN, LOW);
+				did_water = 1;
+        break;
+      case 'W':
+        digitalWrite(WATER_PIN, HIGH);
+				did_water = 1;
+        break;
+    }
+  }
+	if (did_water == 1) {
+		status();
+	}
 }
 
 // Vim modeline
