@@ -1,0 +1,47 @@
+#!/bin/bash
+
+phase=0
+buffer=""
+
+function col() {
+    echo -e $buffer | grep ^2017 | awk "{print \$$1}"
+}
+
+function avgcol() {
+    v=$(col $1)
+    n=$(col $1| wc -l)
+    s=$(echo -e $v | xargs | tr ' ' '+')
+    python3 -c "print('% .1f' % (($s)/$n))"
+}
+
+function summarize() {
+    min=$(avgcol 8)
+    avg=$(avgcol 9)
+    med=$(avgcol 10)
+    std=$(avgcol 11)
+    max=$(avgcol 12)
+    if [ ! -z "$VERBOSE" ]; then 
+        echo -e $buffer
+    fi
+    python3 -c "print('%s %s %s %s %s %s' % (' '*61,'$min','$avg','$med','$std','$max'))"
+}
+
+while read line; do
+    buffer="$buffer\n$line"
+    mth=$(echo $line | cut -f2 -d '-')
+    day=$(echo $line | cut -f3 -d '-' | cut -f1 -d' ')
+    if [ "$phase" -eq "0" ]; then
+        if [ "$mth" -eq "05" -a "$day" -ge "24" ]; then
+            summarize
+            buffer=""
+            phase="1"
+        fi
+    elif [ "$phase" -eq "1" ]; then
+        if [ "$mth" -eq "06" -a "$day" -ge "21" ]; then
+            summarize
+            buffer=""
+            phase="2"
+        fi
+    fi
+done
+summarize
