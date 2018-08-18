@@ -4,5 +4,9 @@ build-cli
 build-cli/*
 logs
 logs/*
-MeterReader/jeelogger
-MeterReader/jeelogger.mips
+common/jeelogger
+common/jeelogger.mips
+build-uno/
+build-uno/*
+build-mega2560
+build-mage2560/*
