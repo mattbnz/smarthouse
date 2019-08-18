@@ -8,16 +8,20 @@
  */
 #include <ESP8266WiFi.h>
 #include <ArduinoOTA.h>
+#include <PubSubClient.h>
 #include <Timer.h>
 
-#define WIFI_SSID "X"
-#define WIFI_PASS "X"
+#include "secrets.h"
+
+#define MQTT_CHANNEL "smarthouse/water/flow-meter"
 
 #define MS_IN_SEC 1000
 #define MS_IN_MIN 60*MS_IN_SEC
 #define ML_IN_LITRE 1000
 
 WiFiServer http(80);
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
 
 Timer t;
 
@@ -40,6 +44,7 @@ void setup() {
 
   initWIFI();
   initOTA();
+  initMQTT();
 
   Serial.println("Ready");
   Serial.print("IP address: ");
@@ -68,7 +73,7 @@ void loop() {
   
   Serial.println("\n[Client connected]");
   while (client.connected()) {
-    client.setSync(true);
+    //client.setSync(true);
     // read line by line what the client (web browser) is requesting
     if (client.available()) {
       String line = client.readStringUntil('\r');
@@ -145,6 +150,15 @@ void updateFlow() {
     Serial.print(", total_mL = ");
     Serial.print(totalMilliLitres);
     Serial.println("");
+
+    if (!mqttClient.connected()) {
+      reconnectMQTT();
+    }
+    char message[240];
+    sprintf(message,
+      "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
+      flowRate, flowMilliLitres, totalMilliLitres);
+    mqttClient.publish(MQTT_CHANNEL, message, true);
 }
 
 void initOTA() {
@@ -199,3 +213,23 @@ void initWIFI() {
   }
   http.begin();
 }
+
+void initMQTT() {
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  if (!mqttClient.connected()) {
+    reconnectMQTT();
+  }
+}
+
+void reconnectMQTT() {
+  // Loop until we're reconnected
+  Serial.println("Attempting MQTT connection...");
+  // Attempt to connect
+  if (mqttClient.connect(MQTT_CLIENT_ID)) {
+    Serial.println("connected");
+  } else {
+    Serial.print("failed, rc=");
+    Serial.println(mqttClient.state());
+  }
+}
+
