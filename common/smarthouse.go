@@ -25,6 +25,7 @@ var httpPort = flag.Int("port", 1510, "HTTP port to listen on")
 var mqttUrl = flag.String("mqtt_url", "tcp://localhost", "URL to the MQTT broker")
 
 type waterCollector struct {
+    pumpNum             int
     currentRate         prometheus.Gauge
     last60s_mL          prometheus.Counter
     total_mL            prometheus.Counter
@@ -34,19 +35,23 @@ type waterCollector struct {
 
 }
 
-func NewWaterCollector() waterCollector {
+func NewWaterCollector(pumpNum int) waterCollector {
     return waterCollector {
+        pumpNum:        pumpNum,
         currentRate:    prometheus.NewGauge(prometheus.GaugeOpts{
             Name:     "mL_per_min",
             Help:     "current (instantaneous) rate of flow in mL/min",
+            ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
         }),
         last60s_mL:     prometheus.NewCounter(prometheus.CounterOpts{
             Name:     "last60s_mL",
             Help:     "last60s mL passed through sensor in the last minute",
+           ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
         }),
         total_mL:       prometheus.NewCounter(prometheus.CounterOpts{
             Name:     "total_mL",
             Help:     "total mL passed through sensor",
+            ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
         }),
     }
 }
@@ -62,7 +67,7 @@ func (c *waterCollector) Init(mqttClient mqtt.Client) {
     prometheus.MustRegister(c.last60s_mL)
     prometheus.MustRegister(c.total_mL)
 
-    mqttClient.Subscribe("smarthouse/water/flow-meter", 0,
+    mqttClient.Subscribe(fmt.Sprintf("smarthouse/water/flow-meter/%d", c.pumpNum), 0,
         func(client mqtt.Client, msg mqtt.Message) {
             var report mqttReport
             err := json.Unmarshal([]byte(msg.Payload()), &report)
@@ -70,8 +75,8 @@ func (c *waterCollector) Init(mqttClient mqtt.Client) {
                 log.Printf("Failed to Unmarshall received report (%s): %v", string(msg.Payload()), err)
                 return;
             }
-            log.Printf("Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
-                string(msg.Payload()), report.ML_per_min, report.Flow_mL, report.Total_mL)
+            log.Printf("Pump %d: Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
+                c.pumpNum, string(msg.Payload()), report.ML_per_min, report.Flow_mL, report.Total_mL)
             c.currentRate.Set(report.ML_per_min)
             c.last60s_mL.Add(report.Flow_mL)
             c.total_mL.Add(report.Flow_mL)
@@ -109,16 +114,11 @@ func main() {
         log.Fatal(err)
     }
     mqtt := mqttConnect("smarthouse", uri)
-    water := NewWaterCollector()
-    water.Init(mqtt)
+    water1 := NewWaterCollector(1)
+    water1.Init(mqtt)
+    water2 := NewWaterCollector(2)
+    water2.Init(mqtt)
 
-    report := mqttReport{
-        ML_per_min: 0.2,
-        Flow_mL: 0.1,
-        Total_mL: 1.0,
-    }
-    b, err := json.Marshal(report)
-    log.Printf("%s", b)
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
     http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), nil)

@@ -13,7 +13,8 @@
 
 #include "secrets.h"
 
-#define MQTT_CHANNEL "smarthouse/water/flow-meter"
+#define MQTT_CHANNEL_1 "smarthouse/water/flow-meter/1"
+#define MQTT_CHANNEL_2 "smarthouse/water/flow-meter/2"
 
 #define MS_IN_SEC 1000
 #define MS_IN_MIN 60*MS_IN_SEC
@@ -25,16 +26,27 @@ PubSubClient mqttClient(espClient);
 
 Timer t;
 
-const byte interruptPin = D4;
-volatile byte pulseCounter = 0;
+const byte PUMP1_PIN = D1;
+const byte PUMP2_PIN = D5;
 
-float flowRate;
-unsigned int flowMilliLitres;
-unsigned long totalMilliLitres;
-unsigned long lastTime;
+typedef struct pumpData {
+    volatile byte counter = 0;
+    
+    float flowRate;
+    unsigned int flowMilliLitres;
+    unsigned long totalMilliLitres;
+    unsigned long lastTime;
+};
 
-void ICACHE_RAM_ATTR handleInterrupt() {
-  pulseCounter++;
+pumpData pump1;
+pumpData pump2;
+
+
+void ICACHE_RAM_ATTR handlePump1Interrupt() {
+  pump1.counter++;
+}
+void ICACHE_RAM_ATTR handlePump2Interrupt() {
+  pump2.counter++;
 }
 
 void setup() {
@@ -50,15 +62,24 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  pulseCounter = 0;
-  flowRate = 0.0;
-  flowMilliLitres = 0;
-  totalMilliLitres = 0;
-  lastTime = millis();
+  pump1.counter = 0;
+  pump1.flowRate = 0.0;
+  pump1.flowMilliLitres = 0;
+  pump1.totalMilliLitres = 0;
+  pump1.lastTime = millis();
+
+  pump2.counter = 0;
+  pump2.flowRate = 0.0;
+  pump2.flowMilliLitres = 0;
+  pump2.totalMilliLitres = 0;
+  pump2.lastTime = millis();
+
   t.every(1000, updateFlow);
 
-  pinMode(interruptPin, INPUT);
-  attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, FALLING);
+  pinMode(PUMP1_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handlePump1Interrupt, FALLING);
+  pinMode(PUMP2_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handlePump2Interrupt, FALLING);
 }
 
 void loop() {
@@ -93,29 +114,17 @@ String statusPage() {
     "Refresh: 1\r\n" +
     "\r\n" +
     WiFi.localIP().toString() + "@" + String(millis()) + "> " +
-    " mL/min = " + String(flowRate) + 
-    ", flow mL = " + String(flowMilliLitres) +
-    ", total mL = " + String(totalMilliLitres) +
+    "Pump1: mL/min = " + String(pump1.flowRate) + 
+    ", flow mL = " + String(pump1.flowMilliLitres) +
+    ", total mL = " + String(pump1.totalMilliLitres) +
+    "; Pump2: mL/min = " + String(pump2.flowRate) + 
+    ", flow mL = " + String(pump2.flowMilliLitres) +
+    ", total mL = " + String(pump2.totalMilliLitres) +
     "\r\n";
   return statusPage;
 }
 
-
-void updateFlow() {
-    unsigned int now;
-    byte pulses;
-    {
-    // Disable interrupts while we read and reset the counter
-    detachInterrupt(digitalPinToInterrupt(interruptPin));
-
-    now = millis();
-    pulses = pulseCounter;
-    pulseCounter = 0;
-    
-    // Re-enable
-    attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, FALLING);
-    }
-
+void updateStats(pumpData *data, const byte pulses, unsigned int now) {
     // per datasheet; pulse characteristic (6*Q-8) Q=L/Min±5%
     // aka pulses=6*L_per_min-8;
     // solved for L_per_min = 1/6*pulses + 4/3
@@ -123,33 +132,59 @@ void updateFlow() {
     // because it's not plausible that we're actually consistently consuming
     // 1.3L/min of water, which is what that would imply.
     if (pulses > 0) {
-      flowRate = (1.0/6.0)*pulses + (4.0/3.0);  // result is L/min, instantaneous
-      flowRate *= ML_IN_LITRE; // convert to ML
+      data->flowRate = (1.0/6.0)*pulses + (4.0/3.0);  // result is L/min, instantaneous
+      data->flowRate *= ML_IN_LITRE; // convert to ML
     } else {
-      flowRate = 0;
+      data->flowRate = 0;
     }
     // divide by fraction of minute that actually passed, to get volume.
-    unsigned long elapsed_ms = now - lastTime;
-    flowMilliLitres = flowRate / (MS_IN_MIN/elapsed_ms);
+    unsigned long elapsed_ms = now - data->lastTime;
+    data->flowMilliLitres = data->flowRate / (MS_IN_MIN/elapsed_ms);
     // and update the cumulative counter
-    totalMilliLitres += flowMilliLitres;
+    data->totalMilliLitres += data->flowMilliLitres;
     // store the time of the current reading for use next time.
-    lastTime = now;
+    data->lastTime = now;
+}
+
+void updateFlow() {
+    unsigned int pump1_now;
+    unsigned int pump2_now;
+    byte pump1_pulses;
+    byte pump2_pulses;
+    {
+    // Disable interrupts while we read and reset the counter
+    detachInterrupt(digitalPinToInterrupt(PUMP1_PIN));
+
+    pump1_now = millis();
+    pump1_pulses = pump1.counter;
+    pump1.counter = 0;
+    
+    // Re-enable
+    attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handlePump1Interrupt, FALLING);
+    }
+    {
+    // Disable interrupts while we read and reset the counter
+    detachInterrupt(digitalPinToInterrupt(PUMP2_PIN));
+
+    pump2_now = millis();
+    pump2_pulses = pump2.counter;
+    pump2.counter = 0;
+    
+    // Re-enable
+    attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handlePump2Interrupt, FALLING);
+    }
+
+    updateStats(&pump1, pump1_pulses, pump1_now);
+    updateStats(&pump2, pump2_pulses, pump2_now);
 
     Serial.print(WiFi.localIP());
     Serial.print("@");
-    Serial.print(now);
-    Serial.print("> ");
-    Serial.print(pulses);
-    Serial.print(" pulses in ");
-    Serial.print(elapsed_ms);
-    Serial.print(" ms; mL/min = ");
-    Serial.print(flowRate);
-    Serial.print(", flow_mL = ");
-    Serial.print(flowMilliLitres);
-    Serial.print(", total_mL = ");
-    Serial.print(totalMilliLitres);
-    Serial.println("");
+    Serial.print(pump1_now);
+    Serial.print("> pump1: ");
+    Serial.print(pump1_pulses);
+    Serial.print(" pulses; pump2:  ");
+    Serial.print(pump2_pulses);
+    Serial.println(" pulses");
 
     if (!mqttClient.connected()) {
       reconnectMQTT();
@@ -157,8 +192,12 @@ void updateFlow() {
     char message[240];
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
-      flowRate, flowMilliLitres, totalMilliLitres);
-    mqttClient.publish(MQTT_CHANNEL, message, true);
+      pump1.flowRate, pump1.flowMilliLitres, pump1.totalMilliLitres);
+    mqttClient.publish(MQTT_CHANNEL_1, message, true);
+    sprintf(message,
+      "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
+      pump2.flowRate, pump2.flowMilliLitres, pump2.totalMilliLitres);
+    mqttClient.publish(MQTT_CHANNEL_2, message, true);
 }
 
 void initOTA() {
