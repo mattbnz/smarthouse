@@ -1,0 +1,16 @@
+Source: smarthouse
+Section: utils
+Priority: optional
+Maintainer: Matt Brown <mattb@debian.org>
+Build-Depends: debhelper-compat (= 12), dh-golang
+Standards-Version: 4.4.1
+Homepage: http://www.mattb.net.nz/
+Vcs-Browser: https://github.com/mattbnz/smarthouse
+Vcs-Git: https://github.com/mattbnz/smarthouse.git
+
+Package: smarthouse
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+XS-Go-Import-Path: github.com/mattbnz/smarthouse
+Description: Smarthouse Software
+ Utilities for running a smart house.

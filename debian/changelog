@@ -1,0 +1,5 @@
+smarthouse (0.0) UNRELEASED; urgency=medium
+
+  * Initial package structure
+
+ -- Matt Brown <mattb@debian.org>  Wed, 29 Apr 2020 01:26:54 +1200

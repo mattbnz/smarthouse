@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: smarthouse
+Upstream-Contact: mattb@debian.org
+Source: https://github.com/mattbnz/smarthouse
+
+Files: *
+Copyright: Copyright 2019 Matt Brown
+License: copyright
+ 
+Files: debian/*
+Copyright: 2020 Matt Brown <mattb@debian.org>
+License: GPL-3.0+
