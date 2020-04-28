@@ -1,5 +1,9 @@
-smarthouse (0.0) UNRELEASED; urgency=medium
+smarthouse (0.0~git.ba17a77) internal; urgency=medium
 
+  [ Matt Brown ]
   * Initial package structure
 
- -- Matt Brown <mattb@debian.org>  Wed, 29 Apr 2020 01:26:54 +1200
+  [ matt ]
+  * Update from git
+
+ -- matt <matt@home.mattb.net.nz>  Wed, 29 Apr 2020 02:16:31 +1200
