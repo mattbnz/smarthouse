@@ -63,6 +63,8 @@ unsigned int sleepInterval = 0;
 // ** Runtime Status variables **
 pumpData pump1;
 pumpData pump2;
+// Have we said hello?
+bool helloSent = false;
 // How many reports have we sent
 unsigned int reportsSent = 0;
 // Handle for the report timer,
@@ -115,7 +117,6 @@ void setup() {
 
   // If we're not in low power mode, say hi and set-up config listener.
   if (!lowPower) {
-    connectMQTT();
     helloAndConfig();
   }
 
@@ -312,6 +313,12 @@ void doReport() {
     Serial.println(" pulses");
 #endif
 
+    // Make sure we always say hello before sending an update if we haven't
+    // already (only used in lowPower mode, since otherwise we'll say hello on
+    // boot).
+    helloAndConfig();
+
+    // Now sent the update.
     char message[240];
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
@@ -322,17 +329,22 @@ void doReport() {
       pump2.flowRate, pump2.flowMilliLitres, pump2.totalMilliLitres);
     mqttClient.publish(MQTT_CHANNEL_2, message, true);
 
+    // Update counter, decide if we need to sleep.
     reportsSent++;
     if (lowPower && reportsSent >= reportCount) {
       timeToSleep = true;
     }
 }
 
-// Publish a hello and subscribe to config topic.
+// Publish a hello and subscribe to config topic if we haven't already.
 void helloAndConfig() {
+  if (helloSent) {
+    return;
+  }
   connectMQTT();
   sendConfig();
   mqttClient.subscribe(MQTT_CONFIG_CHANNEL);
+  helloSent = true;
 #ifdef DEBUG
   Serial.println("Said hello and subscribed to config");
 #endif
