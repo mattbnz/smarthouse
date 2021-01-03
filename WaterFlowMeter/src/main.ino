@@ -1,6 +1,5 @@
 // TODO
-// - config check-in lowPower mode?
-// - move wifi, mqtt configs to disk.
+// - move mqtt configs to disk.
 
 /*
  * Basic water flow meter code, for Wemos 1D mini with a YF-B10 style flow
@@ -48,6 +47,10 @@ struct pumpData {
 // ** Operation Control variables **
 // These are stored into flash and read at startup; new values may be
 // received via MQTT at run-time and are persisted to flash.
+
+// Wifi config
+String wifiSSID;
+String wifiPass;
 
 // enables a low power consumption mode where we sleep for a period
 // before resuming reports per the variables below.
@@ -143,10 +146,33 @@ void loadConfig() {
   reportInterval = readConfigInt("reportInterval", reportInterval);
   reportCount = readConfigInt("reportCount", reportCount);
   sleepInterval = readConfigInt("sleepInterval", sleepInterval);
+  wifiSSID = readConfigString("wifiSSID", "WaterFlowMeter");
+  wifiPass = readConfigString("wifiPass", "wifipass");
 }
 
 // Returns int from file, or defaultVal if not present.
 int readConfigInt(const char* filename, const int defaultVal) {
+  String contents = readConfigString(filename, "0");
+  int v = atoi(contents.c_str());
+  #ifdef DEBUG
+  Serial.print(filename);
+  Serial.print(" config read: ");
+  #endif
+  if (v != 0) {
+    #ifdef DEBUG
+    Serial.println(v);
+    #endif
+    return v;
+  } else {
+    #ifdef DEBUG
+    Serial.println(" (default)");
+    #endif
+    return defaultVal;
+  }
+}
+
+// Returns contents from file, or defaultVal if not present.
+String readConfigString(const char* filename, const String defaultVal) {
   char configfile[1024];
   sprintf(configfile, "/%s", filename);
   File f = LittleFS.open(configfile, "r");
@@ -158,27 +184,25 @@ int readConfigInt(const char* filename, const int defaultVal) {
     return defaultVal;
   }
   String contents = f.readString();
-  int v = atoi(contents.c_str());
   f.close();
-  if (v != 0) {
+  #ifdef DEBUG
+  Serial.print(configfile);
+  Serial.print(" contains: ");
+  #endif
+  if (contents == "") {
     #ifdef DEBUG
-    Serial.print("Read config value ");
-    Serial.print(v);
-    Serial.print(" from ");
-    Serial.println(configfile);
-    #endif
-    return v;
-  } else {
-    #ifdef DEBUG
-    Serial.print("Got invalid config from ");
-    Serial.println(configfile);
+    Serial.println(" nothing! returning default");
     #endif
     return defaultVal;
   }
+  #ifdef DEBUG
+  Serial.println(contents);
+  #endif
+  return contents;
 }
 
-// Writes in to file; returns success or fail.
-bool writeConfigInt(const char* filename, const int value) {
+// Writes to file, returns success or fail
+bool writeConfig(const char* filename, const String value) {
   char configfile[1024];
   sprintf(configfile, "/%s", filename);
   File f = LittleFS.open(configfile, "w");
@@ -371,25 +395,34 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
   }
   memcpy(&buf[0], payload, length);
   buf[length]  = '\0';
-  int value = atoi(&buf[0]);
+  String value = String(buf);
+  int ivalue = atoi(value.c_str());
   if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/lowPower") == 0) {
-    if (writeConfigInt("lowPower", value)) {
-      lowPower = (bool)value;
+    if (writeConfig("lowPower", value)) {
+      lowPower = (bool)ivalue;
     }
   } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/reportInterval") == 0) {
-    if (writeConfigInt("reportInterval", value)) {
-      reportInterval = value;
+    if (writeConfig("reportInterval", value)) {
+      reportInterval = ivalue;
       // reset reporting timer to new value.
       t.stop(timer_handle);
       timer_handle = t.every(reportInterval, doReport);
     }
   } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/reportCount") == 0) {
-    if (writeConfigInt("reportCount", value)) {
-      reportCount = value;
+    if (writeConfig("reportCount", value)) {
+      reportCount = ivalue;
     }
   } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/sleepInterval") == 0) {
-    if (writeConfigInt("sleepInterval", value)) {
-      sleepInterval = value;
+    if (writeConfig("sleepInterval", value)) {
+      sleepInterval = ivalue;
+    }
+  } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/wifiSSID") == 0) {
+    if (writeConfig("wifiSSID", value)) {
+      wifiSSID = value;
+    }
+  } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/wifiPass") == 0) {
+    if (writeConfig("wifiPass", value)) {
+      wifiPass = value;
     }
   } else {
 #ifdef DEBUG
@@ -406,7 +439,7 @@ void connectWIFI() {
     return;
   }
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(wifiSSID, wifiPass);
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     if (!lowPower) {
 #ifdef DEBUG
