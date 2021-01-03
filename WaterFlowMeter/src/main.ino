@@ -195,6 +195,7 @@ String readConfigString(const char* filename, const String defaultVal) {
     #endif
     return defaultVal;
   }
+  contents.trim();
   #ifdef DEBUG
   Serial.println(contents);
   #endif
