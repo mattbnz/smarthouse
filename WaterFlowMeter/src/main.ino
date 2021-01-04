@@ -6,6 +6,7 @@
  *
  * All rights reserved.
  */
+#include <ArduinoOTA.h>
 #include <ESP8266WiFi.h>
 #include <LittleFS.h>
 #include <PubSubClient.h>
@@ -53,6 +54,9 @@ String mqttHost;
 unsigned int mqttPort = 1883;
 String nodeName;
 
+// OTA enabled?
+bool enableOTA = false;
+
 // enables a low power consumption mode where we sleep for a period
 // before resuming reports per the variables below.
 bool lowPower = false;
@@ -69,6 +73,8 @@ pumpData pump1;
 pumpData pump2;
 // Have we said hello?
 bool helloSent = false;
+// OTA status (reported in hello)
+String otaStatus;
 // How many reports have we sent
 unsigned int reportsSent = 0;
 // Handle for the report timer,
@@ -123,6 +129,9 @@ void setup() {
   // Don't write WiFI settings to flash (save writes)
   WiFi.persistent(false);
 
+  // Get ready for OTA (no-op if in low power or not enabled)
+  initOTA();
+
   // If we're not in low power mode, say hi and set-up config listener.
   if (!lowPower) {
     helloAndConfig();
@@ -148,6 +157,7 @@ void loadConfig() {
     LittleFS.format();
   }
   lowPower = (bool)readConfigInt("lowPower", lowPower);
+  enableOTA = (bool)readConfigInt("enableOTA", enableOTA);
   reportInterval = readConfigInt("reportInterval", reportInterval);
   reportCount = readConfigInt("reportCount", reportCount);
   sleepInterval = readConfigInt("sleepInterval", sleepInterval);
@@ -240,6 +250,10 @@ void loop() {
       goToSleep();
     }
     return;
+  }
+
+  if (enableOTA) {
+    ArduinoOTA.handle();
   }
 
   WiFiClient client = http.available();
@@ -375,13 +389,20 @@ void doReport() {
 
 // Publish a hello and subscribe to config topic if we haven't already.
 void helloAndConfig() {
-  if (helloSent) {
+  bool otaMsg = false;
+  if (!otaStatus.startsWith("disabled") && !otaStatus.startsWith("waiting")) {
+    otaMsg = true;
+  }
+  if (helloSent && !otaMsg) {
     return;
   }
   connectMQTT();
   sendConfig();
   mqttClient.subscribe(mqttConfigTopic.c_str());
   helloSent = true;
+  if (otaMsg) {
+    otaStatus = "waiting";
+  }
 #ifdef DEBUG
   Serial.println("Said hello and subscribed to config");
 #endif
@@ -389,10 +410,46 @@ void helloAndConfig() {
 
 void sendConfig() {
   char buf[1024];
-  sprintf(buf,"{\"node\":\"%s\",\"lowPower\":%u,"
+  sprintf(buf,"{\"node\":\"%s\",\"lowPower\":%u,\"otaStatus\":\"%s\","
     "\"reportInterval\":%u, \"reportCount\":%u, \"sleepInterval\":%u}",
-    nodeName.c_str(), lowPower, reportInterval, reportCount, sleepInterval);
+    nodeName.c_str(), lowPower, otaStatus.c_str(), reportInterval,
+    reportCount, sleepInterval);
     mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
+}
+
+void initOTA() {
+  if (lowPower) {
+    otaStatus = "disabled (low power)";
+    return;
+  }
+  if (!enableOTA) {
+    otaStatus = "disabled";
+    return;
+  }
+  otaStatus = "waiting";
+  connectMQTT();
+  ArduinoOTA.onEnd([]() {
+    otaStatus = "OTA completed!";
+    sendConfig();
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    if (error == OTA_AUTH_ERROR) {
+      otaStatus = "Auth Failed";
+    } else if (error == OTA_BEGIN_ERROR) {
+      otaStatus = "Begin Failed";
+    } else if (error == OTA_CONNECT_ERROR) {
+      otaStatus = "Connect Failed";
+    } else if (error == OTA_RECEIVE_ERROR) {
+      otaStatus = "Receive Failed";
+    } else if (error == OTA_END_ERROR) {
+      otaStatus = "End Failed";
+    } else {
+      String n = String(error);
+      otaStatus = "OTA Failed: " + n;
+    }
+    sendConfig();
+  });
+  ArduinoOTA.begin();
 }
 
 // Builds a MQTT topic string for this node. Name must start with /.
@@ -430,6 +487,14 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
   if (stopic.compareTo(mqttConfigTopicName("lowPower")) == 0) {
     if (writeConfig("lowPower", value)) {
       lowPower = (bool)ivalue;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("enableOTA")) == 0) {
+    if (writeConfig("enableOTA", value)) {
+      // OTA setup only takes effect on reboot, so force one by abusing the low
+      // power options in memory only to trigger a reset.
+      lowPower = true;
+      sleepInterval = 1000;
+      timeToSleep = true;
     }
   } else if (stopic.compareTo(mqttConfigTopicName("reportInterval")) == 0) {
     if (writeConfig("reportInterval", value)) {
