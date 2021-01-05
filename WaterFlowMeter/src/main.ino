@@ -1,7 +1,3 @@
-// TODO
-// - config check-in lowPower mode?
-// - move wifi, mqtt configs to disk.
-
 /*
  * Basic water flow meter code, for Wemos 1D mini with a YF-B10 style flow
  * meter attached.
@@ -10,17 +6,17 @@
  *
  * All rights reserved.
  */
+#include <ArduinoOTA.h>
 #include <ESP8266WiFi.h>
 #include <LittleFS.h>
 #include <PubSubClient.h>
 #include <Timer.h>
 
-#include "secrets.h"
-
-#define MQTT_HELLO_CHANNEL "smarthouse/hello"
-#define MQTT_CONFIG_CHANNEL "smarthouse/" MQTT_CLIENT_ID "/config/#"
-#define MQTT_CHANNEL_1 "smarthouse/" MQTT_CLIENT_ID "/flow-meter/1"
-#define MQTT_CHANNEL_2 "smarthouse/" MQTT_CLIENT_ID "/flow-meter/2"
+#define MQTT_TOPIC_PREFIX "smarthouse/"
+#define MQTT_HELLO_TOPIC MQTT_TOPIC_PREFIX "hello"
+#define MQTT_CONFIG_TOPIC "/config/"
+#define MQTT_CH1_SUFFIX "/flow-meter/1"
+#define MQTT_CH2_SUFFIX "/flow-meter/2"
 
 #define MS_IN_SEC 1000
 #define US_IN_MS 1000
@@ -49,6 +45,18 @@ struct pumpData {
 // These are stored into flash and read at startup; new values may be
 // received via MQTT at run-time and are persisted to flash.
 
+// Wifi config
+String wifiSSID;
+String wifiPass;
+
+// MQTT config
+String mqttHost;
+unsigned int mqttPort = 1883;
+String nodeName;
+
+// OTA enabled?
+bool enableOTA = false;
+
 // enables a low power consumption mode where we sleep for a period
 // before resuming reports per the variables below.
 bool lowPower = false;
@@ -63,6 +71,10 @@ unsigned int sleepInterval = 0;
 // ** Runtime Status variables **
 pumpData pump1;
 pumpData pump2;
+// Have we said hello?
+bool helloSent = false;
+// OTA status (reported in hello)
+String otaStatus;
 // How many reports have we sent
 unsigned int reportsSent = 0;
 // Handle for the report timer,
@@ -70,6 +82,10 @@ unsigned int reportsSent = 0;
 int8_t timer_handle = -1;
 // Is it time to go to sleep?
 bool timeToSleep = false;
+// mqtt topic name caches, built on config read
+String mqttConfigTopic;
+String mqttCh1Topic;
+String mqttCh2Topic;
 
 // ** Internal handlers
 void ICACHE_RAM_ATTR handlePump1Interrupt() {
@@ -113,9 +129,11 @@ void setup() {
   // Don't write WiFI settings to flash (save writes)
   WiFi.persistent(false);
 
+  // Get ready for OTA (no-op if in low power or not enabled)
+  initOTA();
+
   // If we're not in low power mode, say hi and set-up config listener.
   if (!lowPower) {
-    connectMQTT();
     helloAndConfig();
   }
 
@@ -139,13 +157,44 @@ void loadConfig() {
     LittleFS.format();
   }
   lowPower = (bool)readConfigInt("lowPower", lowPower);
+  enableOTA = (bool)readConfigInt("enableOTA", enableOTA);
   reportInterval = readConfigInt("reportInterval", reportInterval);
   reportCount = readConfigInt("reportCount", reportCount);
   sleepInterval = readConfigInt("sleepInterval", sleepInterval);
+  wifiSSID = readConfigString("wifiSSID", "WaterFlowMeter");
+  wifiPass = readConfigString("wifiPass", "wifipass");
+  mqttHost = readConfigString("mqttHost", "mqtt");
+  mqttPort = readConfigInt("mqttPort", mqttPort);
+  nodeName = readConfigString("nodeName", "WaterFlowMeter");
+  // Build cached MQTT topic names
+  mqttConfigTopic = mqttConfigTopicName("#");
+  mqttCh1Topic = mqttTopicName(MQTT_CH1_SUFFIX);
+  mqttCh2Topic = mqttTopicName(MQTT_CH2_SUFFIX);
 }
 
 // Returns int from file, or defaultVal if not present.
 int readConfigInt(const char* filename, const int defaultVal) {
+  String contents = readConfigString(filename, "0");
+  int v = atoi(contents.c_str());
+  #ifdef DEBUG
+  Serial.print(filename);
+  Serial.print(" config read: ");
+  #endif
+  if (v != 0) {
+    #ifdef DEBUG
+    Serial.println(v);
+    #endif
+    return v;
+  } else {
+    #ifdef DEBUG
+    Serial.println(" (default)");
+    #endif
+    return defaultVal;
+  }
+}
+
+// Returns contents from file, or defaultVal if not present.
+String readConfigString(const char* filename, const String defaultVal) {
   char configfile[1024];
   sprintf(configfile, "/%s", filename);
   File f = LittleFS.open(configfile, "r");
@@ -157,27 +206,26 @@ int readConfigInt(const char* filename, const int defaultVal) {
     return defaultVal;
   }
   String contents = f.readString();
-  int v = atoi(contents.c_str());
   f.close();
-  if (v != 0) {
+  #ifdef DEBUG
+  Serial.print(configfile);
+  Serial.print(" contains: ");
+  #endif
+  if (contents == "") {
     #ifdef DEBUG
-    Serial.print("Read config value ");
-    Serial.print(v);
-    Serial.print(" from ");
-    Serial.println(configfile);
-    #endif
-    return v;
-  } else {
-    #ifdef DEBUG
-    Serial.print("Got invalid config from ");
-    Serial.println(configfile);
+    Serial.println(" nothing! returning default");
     #endif
     return defaultVal;
   }
+  contents.trim();
+  #ifdef DEBUG
+  Serial.println(contents);
+  #endif
+  return contents;
 }
 
-// Writes in to file; returns success or fail.
-bool writeConfigInt(const char* filename, const int value) {
+// Writes to file, returns success or fail
+bool writeConfig(const char* filename, const String value) {
   char configfile[1024];
   sprintf(configfile, "/%s", filename);
   File f = LittleFS.open(configfile, "w");
@@ -202,6 +250,10 @@ void loop() {
       goToSleep();
     }
     return;
+  }
+
+  if (enableOTA) {
+    ArduinoOTA.handle();
   }
 
   WiFiClient client = http.available();
@@ -312,27 +364,45 @@ void doReport() {
     Serial.println(" pulses");
 #endif
 
+    // Make sure we always say hello before sending an update if we haven't
+    // already (only used in lowPower mode, since otherwise we'll say hello on
+    // boot).
+    helloAndConfig();
+
+    // Now sent the update.
     char message[240];
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
       pump1.flowRate, pump1.flowMilliLitres, pump1.totalMilliLitres);
-    mqttClient.publish(MQTT_CHANNEL_1, message, true);
+    mqttClient.publish(mqttCh1Topic.c_str(), message, true);
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
       pump2.flowRate, pump2.flowMilliLitres, pump2.totalMilliLitres);
-    mqttClient.publish(MQTT_CHANNEL_2, message, true);
+    mqttClient.publish(mqttCh2Topic.c_str(), message, true);
 
+    // Update counter, decide if we need to sleep.
     reportsSent++;
     if (lowPower && reportsSent >= reportCount) {
       timeToSleep = true;
     }
 }
 
-// Publish a hello and subscribe to config topic.
+// Publish a hello and subscribe to config topic if we haven't already.
 void helloAndConfig() {
+  bool otaMsg = false;
+  if (!otaStatus.startsWith("disabled") && !otaStatus.startsWith("waiting")) {
+    otaMsg = true;
+  }
+  if (helloSent && !otaMsg) {
+    return;
+  }
   connectMQTT();
   sendConfig();
-  mqttClient.subscribe(MQTT_CONFIG_CHANNEL);
+  mqttClient.subscribe(mqttConfigTopic.c_str());
+  helloSent = true;
+  if (otaMsg) {
+    otaStatus = "waiting";
+  }
 #ifdef DEBUG
   Serial.println("Said hello and subscribed to config");
 #endif
@@ -340,10 +410,62 @@ void helloAndConfig() {
 
 void sendConfig() {
   char buf[1024];
-  sprintf(buf,"{\"node\":\"" MQTT_CLIENT_ID "\",\"lowPower\":%u,"
+  sprintf(buf,"{\"node\":\"%s\",\"lowPower\":%u,\"otaStatus\":\"%s\","
     "\"reportInterval\":%u, \"reportCount\":%u, \"sleepInterval\":%u}",
-    lowPower, reportInterval, reportCount, sleepInterval);
-    mqttClient.publish(MQTT_HELLO_CHANNEL, buf, true);
+    nodeName.c_str(), lowPower, otaStatus.c_str(), reportInterval,
+    reportCount, sleepInterval);
+    mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
+}
+
+void initOTA() {
+  if (lowPower) {
+    otaStatus = "disabled (low power)";
+    return;
+  }
+  if (!enableOTA) {
+    otaStatus = "disabled";
+    return;
+  }
+  otaStatus = "waiting";
+  connectMQTT();
+  ArduinoOTA.onEnd([]() {
+    otaStatus = "OTA completed!";
+    sendConfig();
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    if (error == OTA_AUTH_ERROR) {
+      otaStatus = "Auth Failed";
+    } else if (error == OTA_BEGIN_ERROR) {
+      otaStatus = "Begin Failed";
+    } else if (error == OTA_CONNECT_ERROR) {
+      otaStatus = "Connect Failed";
+    } else if (error == OTA_RECEIVE_ERROR) {
+      otaStatus = "Receive Failed";
+    } else if (error == OTA_END_ERROR) {
+      otaStatus = "End Failed";
+    } else {
+      String n = String(error);
+      otaStatus = "OTA Failed: " + n;
+    }
+    sendConfig();
+  });
+  ArduinoOTA.begin();
+}
+
+// Builds a MQTT topic string for this node. Name must start with /.
+String mqttTopicName(String name) {
+  // rv == MQTT_PREFIX + nodeName + name
+  // e.g. "smarthouse/" + "thisNode" + "/someTopic"
+  String rv = String(MQTT_TOPIC_PREFIX);
+  rv.concat(nodeName);
+  rv.concat(name);
+  return rv;
+}
+// Helper for a config topic (prepends /config/ to the config name)
+String mqttConfigTopicName(String name) {
+  String rv = MQTT_CONFIG_TOPIC;
+  rv.concat(name);
+  return mqttTopicName(rv);
 }
 
 void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
@@ -359,25 +481,55 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
   }
   memcpy(&buf[0], payload, length);
   buf[length]  = '\0';
-  int value = atoi(&buf[0]);
-  if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/lowPower") == 0) {
-    if (writeConfigInt("lowPower", value)) {
-      lowPower = (bool)value;
+  String value = String(buf);
+  int ivalue = atoi(value.c_str());
+  String stopic = String(topic);
+  if (stopic.compareTo(mqttConfigTopicName("lowPower")) == 0) {
+    if (writeConfig("lowPower", value)) {
+      lowPower = (bool)ivalue;
     }
-  } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/reportInterval") == 0) {
-    if (writeConfigInt("reportInterval", value)) {
-      reportInterval = value;
+  } else if (stopic.compareTo(mqttConfigTopicName("enableOTA")) == 0) {
+    if (writeConfig("enableOTA", value)) {
+      // OTA setup only takes effect on reboot, so force one by abusing the low
+      // power options in memory only to trigger a reset.
+      lowPower = true;
+      sleepInterval = 1000;
+      timeToSleep = true;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("reportInterval")) == 0) {
+    if (writeConfig("reportInterval", value)) {
+      reportInterval = ivalue;
       // reset reporting timer to new value.
       t.stop(timer_handle);
       timer_handle = t.every(reportInterval, doReport);
     }
-  } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/reportCount") == 0) {
-    if (writeConfigInt("reportCount", value)) {
-      reportCount = value;
+  } else if (stopic.compareTo(mqttConfigTopicName("reportCount")) == 0) {
+    if (writeConfig("reportCount", value)) {
+      reportCount = ivalue;
     }
-  } else if (strcmp(topic, "smarthouse/" MQTT_CLIENT_ID "/config/sleepInterval") == 0) {
-    if (writeConfigInt("sleepInterval", value)) {
-      sleepInterval = value;
+  } else if (stopic.compareTo(mqttConfigTopicName("sleepInterval")) == 0) {
+    if (writeConfig("sleepInterval", value)) {
+      sleepInterval = ivalue;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("wifiSSID")) == 0) {
+    if (writeConfig("wifiSSID", value)) {
+      wifiSSID = value;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("wifiPass")) == 0) {
+    if (writeConfig("wifiPass", value)) {
+      wifiPass = value;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("mqttHost")) == 0) {
+    if (writeConfig("mqttHost", value)) {
+      mqttHost = value;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("mqttPort")) == 0) {
+    if (writeConfig("mqttPort", value)) {
+      mqttPort = ivalue;
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("nodeName")) == 0) {
+    if (writeConfig("nodeName", value)) {
+      nodeName = value;
     }
   } else {
 #ifdef DEBUG
@@ -394,7 +546,7 @@ void connectWIFI() {
     return;
   }
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(wifiSSID, wifiPass);
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     if (!lowPower) {
 #ifdef DEBUG
@@ -417,13 +569,13 @@ void connectMQTT() {
     return;
   }
 	
-  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  mqttClient.setServer(mqttHost.c_str(), mqttPort);
   mqttClient.setCallback(handleConfigMsg);
 #ifdef DEBUG
   Serial.println("Attempting MQTT connection...");
 #endif
   // Attempt to connect
-  if (mqttClient.connect(MQTT_CLIENT_ID)) {
+  if (mqttClient.connect(nodeName.c_str())) {
 #ifdef DEBUG
     Serial.println("connected");
 #endif
