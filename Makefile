@@ -1,17 +1,20 @@
 SHELL :=/bin/bash
-VERSION_A := "0.0~git.$$(git rev-parse --short HEAD)"
-VERSION_B := "0.0~git.$$(git rev-parse --short HEAD^1)"
-PKG = "$$(dpkg-parsechangelog -S Version)"
+VERSION_A := "$$(git rev-parse --short HEAD)"
+VERSION_B := "$$(git rev-parse --short HEAD^1)"
+DATE := "$$(date +%Y%m%d%H%M)"
+NEW := "0.0~git.$(DATE).$(VERSION_A)"
+PKG := "$$(dpkg-parsechangelog -S Version)"
+PKGGIT := "$$(dpkg-parsechangelog -S Version | cut -f4 -d.)"
 
 changes:
 	@if ! git diff --exit-code --quiet; then echo >&2 "uncommitted changes"; false; fi
 
 needsupdate:
-	@if [ $(PKG) == $(VERSION_A) ]; then echo >&2 "up to date"; false; fi
-	@if [ $(PKG) == $(VERSION_B) ]; then echo >&2 "up to date"; false; fi
+	@if [ $(PKGGIT) == $(VERSION_A) ]; then echo >&2 "up to date"; false; fi
+	@if [ $(PKGGIT) == $(VERSION_B) ]; then echo >&2 "up to date"; false; fi
 
 bumpversion: changes needsupdate
-	@dch -b -v "$(VERSION_A)" "Update from git"
+	@dch -b -v "$(NEW)" "Update from git"
 	@dch -D internal --force-distribution -r ""
 	git commit -m "package update" debian/changelog
 
