@@ -25,33 +25,34 @@ var httpPort = flag.Int("port", 1510, "HTTP port to listen on")
 var mqttUrl = flag.String("mqtt_url", "tcp://localhost", "URL to the MQTT broker")
 
 type waterCollector struct {
-    pumpNum             int
+    nodeName            string
+    flowNum             int
     currentRate         prometheus.Gauge
     last60s_mL          prometheus.Counter
     total_mL            prometheus.Counter
     lastRecord          time.Time
     lastReceived        time.Time
-    //TODO probably need a lock... 
-
 }
 
-func NewWaterCollector(pumpNum int) waterCollector {
+func NewWaterCollector(nodeName string, flowNum int) waterCollector {
+    labels := prometheus.Labels{"node": nodeName, "flow": fmt.Sprintf("%d", flowNum)}
     return waterCollector {
-        pumpNum:        pumpNum,
+        nodeName:       nodeName,
+        flowNum:        flowNum,
         currentRate:    prometheus.NewGauge(prometheus.GaugeOpts{
             Name:     "mL_per_min",
             Help:     "current (instantaneous) rate of flow in mL/min",
-            ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
+            ConstLabels:   labels,
         }),
         last60s_mL:     prometheus.NewCounter(prometheus.CounterOpts{
             Name:     "last60s_mL",
             Help:     "last60s mL passed through sensor in the last minute",
-           ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
+            ConstLabels:   labels,
         }),
         total_mL:       prometheus.NewCounter(prometheus.CounterOpts{
             Name:     "total_mL",
             Help:     "total mL passed through sensor",
-            ConstLabels:   prometheus.Labels{"pump": fmt.Sprintf("%d", pumpNum)},
+            ConstLabels:   labels,
         }),
     }
 }
@@ -67,16 +68,18 @@ func (c *waterCollector) Init(mqttClient mqtt.Client) {
     prometheus.MustRegister(c.last60s_mL)
     prometheus.MustRegister(c.total_mL)
 
-    mqttClient.Subscribe(fmt.Sprintf("smarthouse/water/flow-meter/%d", c.pumpNum), 0,
-        func(client mqtt.Client, msg mqtt.Message) {
+    topic := fmt.Sprintf("smarthouse/%s/flow-meter/%d", c.nodeName, c.flowNum)
+    log.Printf("Subscribing to receive updates for %s", topic)
+    mqttClient.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
             var report mqttReport
             err := json.Unmarshal([]byte(msg.Payload()), &report)
             if err != nil {
                 log.Printf("Failed to Unmarshall received report (%s): %v", string(msg.Payload()), err)
                 return;
             }
-            log.Printf("Pump %d: Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
-                c.pumpNum, string(msg.Payload()), report.ML_per_min, report.Flow_mL, report.Total_mL)
+            log.Printf("%s Flow %d: Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
+                c.nodeName, c.flowNum, string(msg.Payload()), report.ML_per_min, report.Flow_mL,
+                report.Total_mL)
             c.currentRate.Set(report.ML_per_min)
             c.last60s_mL.Add(report.Flow_mL)
             c.total_mL.Add(report.Flow_mL)
@@ -114,10 +117,15 @@ func main() {
         log.Fatal(err)
     }
     mqtt := mqttConnect("smarthouse", uri)
-    water1 := NewWaterCollector(1)
-    water1.Init(mqtt)
-    water2 := NewWaterCollector(2)
-    water2.Init(mqtt)
+    // TODO: This needs a config file...
+    pump1 := NewWaterCollector("pumpmon", 1)
+    pump1.Init(mqtt)
+    pump2 := NewWaterCollector("pumpmon", 2)
+    pump2.Init(mqtt)
+    spring1 := NewWaterCollector("spring", 1)
+    spring1.Init(mqtt)
+    spring2 := NewWaterCollector("spring", 2)
+    spring2.Init(mqtt)
 
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
