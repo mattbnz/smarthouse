@@ -126,6 +126,10 @@ func main() {
     spring1.Init(mqtt)
     spring2 := NewWaterCollector("spring", 2)
     spring2.Init(mqtt)
+    house1 := NewWaterCollector("housepump", 1)
+    house1.Init(mqtt)
+    house2 := NewWaterCollector("housepump", 2)
+    house2.Init(mqtt)
 
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
