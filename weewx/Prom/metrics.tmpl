@@ -1,0 +1,66 @@
+#errorCatcher Echo
+#encoding UTF-8
+
+# HELP archive_timestamp_seconds The archive timestamp of the exported records
+# HELP archive_timestamp_seconds gauge
+archive_timestamp_seconds $current.dateTime.raw
+
+# HELP barometer_hpa The current barometer reading
+# TYPE barometer_hpa gauge
+barometer_hpa $current.barometer.hPa.raw 
+
+# HELP dew_point_celsius The current dew point
+# TYPE dew_point_celsius gauge
+dew_point_celsius $current.dewpoint.degree_C.raw 
+
+# HELP heat_index_celsius The current heat index
+# TYPE heat_index_celsius gauge
+heat_index_celsius $current.heatindex.degree_C.raw 
+
+# HELP in_humidity_percent The current inside humidity
+# TYPE in_humidity_percent gauge
+in_humidity_percent $current.inHumidity.percent.raw 
+
+# HELP in_temp_celsius The current inside temperature
+# TYPE in_temp_celsius gauge
+in_temp_celsius $current.inTemp.degree_C.raw 
+
+# HELP interval_mins The configured archive interval
+# TYPE interval_mins gauge
+interval_mins $current.interval.minute.raw 
+
+# HELP out_humidity_percent The current outside humidity
+# TYPE out_humidity_percent gauge
+out_humidity_percent $current.outHumidity.percent.raw 
+
+# HELP out_temp_celsius The current outside temperature
+# TYPE out_temp_celsius gauge
+out_temp_celsius $current.outTemp.degree_C.raw 
+
+# HELP rain_mm The amount of rainfall in the interval
+# TYPE rain_mm counter
+rain_mm $current.rain.mm.raw 
+
+# HELP rain_rate_mm_per_hour The current rate of rainfall
+# TYPE rain_rate_mm_per_hour gauge
+rain_rate_mm_per_hour $current.rainRate.mm_per_hour.raw 
+
+# HELP wind_dir_deg The current wind direction
+# TYPE wind_dir_deg gauge
+wind_dir_deg $current.windDir.degree_compass.nolabel('%d', '0')
+
+# HELP wind_gust_m_per_s The current wind gust speed
+# TYPE wind_gust_m_per_s gauge
+wind_gust_m_per_s $current.windGust.meter_per_second.raw 
+
+# HELP wind_gust_dir_deg The current wind gust direction
+# TYPE wind_gust_dir_deg gauge
+wind_gust_dir_deg $current.windGustDir.degree_compass.nolabel('%d', '0')
+
+# HELP wind_speed_m_per_s The current wind speed
+# TYPE wind_speed_m_per_s gauge
+wind_speed_m_per_s $current.windSpeed.meter_per_second.raw 
+
+# HELP wind_chill_celsius The current wind chill
+# TYPE wind_chill_celsius gauge
+wind_chill_celsius $current.windchill.degree_C.raw 

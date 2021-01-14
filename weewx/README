@@ -1,0 +1,16 @@
+This directory contains a 'Skin' for weewx which outputs weather metrics into a
+Prometheus metric file that can be scraped by Prometheus.
+
+To use
+1) Copy the 'Prom' directory into your Skins folder (e.g. /etc/weewx/skins/)
+2) In your weewx.conf, add the following stanza within the [StdReport] section
+     
+    [[Prom]]
+        skin = Prom
+3) Restart weewx, your metrics file should show up in your standard HTML output directory
+4) In your prometheus config add a scrape_configs stanza as follows:
+
+  - job_name: 'weather'
+    metrics_path: '/weewx/metrics'
+    static_configs:
+      - targets: ['your-weewx-webserver.localdomain']
