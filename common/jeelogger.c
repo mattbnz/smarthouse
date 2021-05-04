@@ -20,6 +20,7 @@
 #include <syslog.h>
 #include <termios.h>
 #include <time.h>
+#include <math.h>
 
 struct logfile {
     char *logdir;
@@ -71,7 +72,7 @@ int check_logfile(struct logfile* log, time_t now) {
 }
 
 void write_metrics(struct logfile* log, time_t now) {
-    char tmp[PATH_MAX];  // Blah blah, don't run this on insane fses.
+    char tmp[PATH_MAX+4];  // Blah blah, don't run this on insane fses.
     char path[PATH_MAX];
     if (sprintf((char *)&path, "%s/metrics", log->logdir) == -1) {
         syslog(LOG_CRIT, "Cannot make path for metrics file!");
@@ -155,7 +156,7 @@ int process_line(struct logfile *log, char *buf, char *nl) {
     line[len+1] = '\0';
     int n, b, p, i;
     n = b = p = 0;
-    float t=0.0;
+    float t=NAN;
     char *tp = (char *)&t;
     char *pp = (char *)&p;
     int is_be = detect_be();
@@ -197,7 +198,10 @@ int process_line(struct logfile *log, char *buf, char *nl) {
                 break;
         }
     }
-    if (i == 12 && n>0 && b>0 && t!=0.0) {
+    if (isnan(t)) {
+        t = -128.0;
+    }
+    if (i == 12 && n>0 && b>0) {
         node_status[n].seq = p;
         node_status[n].temp = t;
         node_status[n].bat = b;
