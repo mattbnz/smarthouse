@@ -411,12 +411,13 @@ void helloAndConfig() {
 
 void sendConfig() {
   char buf[1024];
-  sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\","
-    "\"lowPower\":%u,\"otaStatus\":\"%s\","
-    "\"reportInterval\":%u, \"reportCount\":%u, \"sleepInterval\":%u}",
-    nodeName.c_str(), lowPower, otaStatus.c_str(), reportInterval,
+  sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\",\"ip\":\"%s\","
+    "\"lowPower\":%u,\"otaStatus\":\"%s\",\"reportInterval\":%u,"
+    "\"reportCount\":%u, \"sleepInterval\":%u}",
+    nodeName.c_str(), WiFi.localIP().toString().c_str(),
+    lowPower, otaStatus.c_str(), reportInterval,
     reportCount, sleepInterval);
-    mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
+  mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
 }
 
 void initOTA() {
