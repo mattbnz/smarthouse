@@ -89,10 +89,10 @@ String mqttCh1Topic;
 String mqttCh2Topic;
 
 // ** Internal handlers
-void ICACHE_RAM_ATTR handleFlow1Interrupt() {
+void IRAM_ATTR handleFlow1Interrupt() {
   flow1.counter++;
 }
-void ICACHE_RAM_ATTR handleFlow2Interrupt() {
+void IRAM_ATTR handleFlow2Interrupt() {
   flow2.counter++;
 }
 
