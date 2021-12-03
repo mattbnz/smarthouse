@@ -27,6 +27,11 @@ bool enableOTA = false;
 
 // ** End Operational Control variables **
 
+// ** Runtime Status variables **
+
+// OTA status
+String otaStatus;
+
 // ** Internal handlers
 
 // ** Functions follow.
@@ -49,7 +54,7 @@ void setup() {
   // Get online.
   connectWIFI();
 
-  // Get ready for OTA (no-op if in low power or not enabled)
+  // Get ready for OTA (no-op if not enabled)
   initOTA();
 
 #ifdef DEBUG
@@ -68,7 +73,6 @@ void loadConfig() {
   enableOTA = (bool)readConfigInt("enableOTA", enableOTA);
   wifiSSID = readConfigString("wifiSSID", "WaterSwitch");
   wifiPass = readConfigString("wifiPass", "wifipass");
-  nodeName = readConfigString("nodeName", "WaterSwitch");
 }
 
 // Returns int from file, or defaultVal if not present.
@@ -173,13 +177,18 @@ void loop() {
   // Send the response to the client
   // it is OK for multiple small client.print/write,
   // because nagle algorithm will group them into one single packet
-  client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE HTML>\r\n<html>\r\nWater is now "));
+  client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"));
+  client.print(F("<!DOCTYPE HTML>\r\n<html>\r\n"));
+  client.print(F("<h1>Seaforth Road</h1><br>Water is now "));
   client.print((val) ? F("on") : F("off"));
   client.print(F("<br><br>Click <a href='http://"));
   client.print(WiFi.localIP());
   client.print(F("/water/on'>here</a> to switch water on, or <a href='http://"));
   client.print(WiFi.localIP());
-  client.print(F("/water/off'>here</a> to switch water off.</html>"));
+  client.print(F("/water/off'>here</a> to switch water off."));
+  client.print(F("<br><br>OTA Status: "));
+  client.print(otaStatus);
+  client.print(F("</html>"));
 
   // The client will actually be *flushed* then disconnected
   // when the function returns and 'client' object is destroyed (out-of-scope)
@@ -190,19 +199,13 @@ void loop() {
 }
 
 void initOTA() {
-  if (lowPower) {
-    otaStatus = "disabled (low power)";
-    return;
-  }
   if (!enableOTA) {
     otaStatus = "disabled";
     return;
   }
   otaStatus = "waiting";
-  connectMQTT();
   ArduinoOTA.onEnd([]() {
     otaStatus = "OTA completed!";
-    sendConfig();
   });
   ArduinoOTA.onError([](ota_error_t error) {
     if (error == OTA_AUTH_ERROR) {
@@ -219,7 +222,6 @@ void initOTA() {
       String n = String(error);
       otaStatus = "OTA Failed: " + n;
     }
-    sendConfig();
   });
   ArduinoOTA.begin();
 }
