@@ -444,11 +444,11 @@ String pinToString(const uint8_t pin) {
 void sendConfig() {
   char buf[1024];
   sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\",\"ip\":\"%s\","
-    "\"lowPower\":%u,\"otaStatus\":\"%s\","
+    "\"lowPower\":%u,\"otaStatus\":\"%s\",\"wifiSSID\":\"%s\","
     "\"flow1Pin\":\"%s\",\"flow2Pin\":\"%s\","
     "\"reportInterval\":%u,\"reportCount\":%u, \"sleepInterval\":%u}",
     nodeName.c_str(), WiFi.localIP().toString().c_str(),
-    lowPower, otaStatus.c_str(),
+    lowPower, otaStatus.c_str(), wifiSSID.c_str(),
     pinToString(flow1.pin).c_str(), pinToString(flow2.pin).c_str(),
     reportInterval, reportCount, sleepInterval);
   mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
