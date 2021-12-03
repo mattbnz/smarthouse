@@ -15,5 +15,5 @@ def CreateVersion():
     return version
 
 env.Append(BUILD_FLAGS=[
-    '-D VERSION=\\\"%s\\\"' % CreateVersion()
+    '-D GIT_VERSION=\\\"%s\\\"' % CreateVersion()
     ])

@@ -23,6 +23,13 @@
 #define MS_IN_MIN 60*MS_IN_SEC
 #define ML_IN_LITRE 1000
 
+#ifdef DEBUG
+  #define VERSION GIT_VERSION "-D"
+#endif
+#ifndef VERSION
+  #define VERSION GIT_VERSION
+#endif
+
 WiFiServer http(80);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
