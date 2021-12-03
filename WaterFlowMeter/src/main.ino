@@ -29,10 +29,11 @@ PubSubClient mqttClient(espClient);
 
 Timer t;
 
+// TODO: Next, make these configurable
 const byte PUMP1_PIN = D1;
 const byte PUMP2_PIN = D5;
 
-struct pumpData {
+struct flowData {
     volatile byte counter = 0;
 
     float flowRate;
@@ -69,8 +70,8 @@ unsigned int sleepInterval = 0;
 // ** End Operational Control variables **
 
 // ** Runtime Status variables **
-pumpData pump1;
-pumpData pump2;
+flowData flow1;
+flowData flow2;
 // Have we said hello?
 bool helloSent = false;
 // OTA status (reported in hello)
@@ -88,11 +89,11 @@ String mqttCh1Topic;
 String mqttCh2Topic;
 
 // ** Internal handlers
-void ICACHE_RAM_ATTR handlePump1Interrupt() {
-  pump1.counter++;
+void ICACHE_RAM_ATTR handleFlow1Interrupt() {
+  flow1.counter++;
 }
-void ICACHE_RAM_ATTR handlePump2Interrupt() {
-  pump2.counter++;
+void ICACHE_RAM_ATTR handleFlow2Interrupt() {
+  flow2.counter++;
 }
 
 // ** Functions follow.
@@ -100,17 +101,17 @@ void zeroCounters() {
   reportsSent = 0;
   timeToSleep = false;
 
-  pump1.counter = 0;
-  pump1.flowRate = 0.0;
-  pump1.flowMilliLitres = 0;
-  pump1.totalMilliLitres = 0;
-  pump1.lastTime = millis();
+  flow1.counter = 0;
+  flow1.flowRate = 0.0;
+  flow1.flowMilliLitres = 0;
+  flow1.totalMilliLitres = 0;
+  flow1.lastTime = millis();
 
-  pump2.counter = 0;
-  pump2.flowRate = 0.0;
-  pump2.flowMilliLitres = 0;
-  pump2.totalMilliLitres = 0;
-  pump2.lastTime = millis();
+  flow2.counter = 0;
+  flow2.flowRate = 0.0;
+  flow2.flowMilliLitres = 0;
+  flow2.totalMilliLitres = 0;
+  flow2.lastTime = millis();
 }
 
 void setup() {
@@ -139,8 +140,8 @@ void setup() {
 
   // Kick off the reporting loop and set-up to receive interrupts.
   zeroCounters();
-  attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handlePump1Interrupt, FALLING);
-  attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handlePump2Interrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handleFlow1Interrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handleFlow2Interrupt, FALLING);
   timer_handle = t.every(reportInterval, doReport);
 
 #ifdef DEBUG
@@ -286,19 +287,19 @@ String statusPage() {
     "Refresh: 1\r\n" +
     "\r\n" +
     WiFi.localIP().toString() + "@" + String(millis()) + "> " +
-    "Pump1: mL/min = " + String(pump1.flowRate) +
-    ", flow mL = " + String(pump1.flowMilliLitres) +
-    ", total mL = " + String(pump1.totalMilliLitres) +
-    "; Pump2: mL/min = " + String(pump2.flowRate) +
-    ", flow mL = " + String(pump2.flowMilliLitres) +
-    ", total mL = " + String(pump2.totalMilliLitres) +
+    "Flow1: mL/min = " + String(flow1.flowRate) +
+    ", flow mL = " + String(flow1.flowMilliLitres) +
+    ", total mL = " + String(flow1.totalMilliLitres) +
+    "; Flow2: mL/min = " + String(flow2.flowRate) +
+    ", flow mL = " + String(flow2.flowMilliLitres) +
+    ", total mL = " + String(flow2.totalMilliLitres) +
     "; version: " + VERSION +
     "\r\n";
   return statusPage;
 }
 
 // Called by doReport to convert pulses into flow rates and usage.
-void updateStats(pumpData *data, const byte pulses, unsigned int now) {
+void updateStats(flowData *data, const byte pulses, unsigned int now) {
     // per datasheet; pulse characteristic (6*Q-8) Q=L/Min±5%
     // aka pulses=6*L_per_min-8;
     // solved for L_per_min = 1/6*pulses + 4/3
@@ -322,46 +323,46 @@ void updateStats(pumpData *data, const byte pulses, unsigned int now) {
 
 // called by the timer when it's time to make a report.
 void doReport() {
-    unsigned int pump1_now;
-    unsigned int pump2_now;
-    byte pump1_pulses;
-    byte pump2_pulses;
+    unsigned int flow1_now;
+    unsigned int flow2_now;
+    byte flow1_pulses;
+    byte flow2_pulses;
     {
     // Disable interrupts while we read and reset the counter
     detachInterrupt(digitalPinToInterrupt(PUMP1_PIN));
 
-    pump1_now = millis();
-    pump1_pulses = pump1.counter;
-    pump1.counter = 0;
+    flow1_now = millis();
+    flow1_pulses = flow1.counter;
+    flow1.counter = 0;
 
     // Re-enable
-    attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handlePump1Interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handleFlow1Interrupt, FALLING);
     }
     {
     // Disable interrupts while we read and reset the counter
     detachInterrupt(digitalPinToInterrupt(PUMP2_PIN));
 
-    pump2_now = millis();
-    pump2_pulses = pump2.counter;
-    pump2.counter = 0;
+    flow2_now = millis();
+    flow2_pulses = flow2.counter;
+    flow2.counter = 0;
 
     // Re-enable
-    attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handlePump2Interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handleFlow2Interrupt, FALLING);
     }
 
-    updateStats(&pump1, pump1_pulses, pump1_now);
-    updateStats(&pump2, pump2_pulses, pump2_now);
+    updateStats(&flow1, flow1_pulses, flow1_now);
+    updateStats(&flow2, flow2_pulses, flow2_now);
 
     connectMQTT();
 
 #ifdef DEBUG
     Serial.print(WiFi.localIP());
     Serial.print("@");
-    Serial.print(pump1_now);
-    Serial.print("> pump1: ");
-    Serial.print(pump1_pulses);
-    Serial.print(" pulses; pump2:  ");
-    Serial.print(pump2_pulses);
+    Serial.print(flow1_now);
+    Serial.print("> flow1: ");
+    Serial.print(flow1_pulses);
+    Serial.print(" pulses; flow2:  ");
+    Serial.print(flow2_pulses);
     Serial.println(" pulses");
 #endif
 
@@ -374,11 +375,11 @@ void doReport() {
     char message[240];
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
-      pump1.flowRate, pump1.flowMilliLitres, pump1.totalMilliLitres);
+      flow1.flowRate, flow1.flowMilliLitres, flow1.totalMilliLitres);
     mqttClient.publish(mqttCh1Topic.c_str(), message, true);
     sprintf(message,
       "{\"mL_per_min\":%f,\"flow_mL\":%d, \"total_mL\":%ld}",
-      pump2.flowRate, pump2.flowMilliLitres, pump2.totalMilliLitres);
+      flow2.flowRate, flow2.flowMilliLitres, flow2.totalMilliLitres);
     mqttClient.publish(mqttCh2Topic.c_str(), message, true);
 
     // Update counter, decide if we need to sleep.
