@@ -292,6 +292,7 @@ String statusPage() {
     "; Pump2: mL/min = " + String(pump2.flowRate) +
     ", flow mL = " + String(pump2.flowMilliLitres) +
     ", total mL = " + String(pump2.totalMilliLitres) +
+    "; version: " + VERSION +
     "\r\n";
   return statusPage;
 }
@@ -410,7 +411,8 @@ void helloAndConfig() {
 
 void sendConfig() {
   char buf[1024];
-  sprintf(buf,"{\"node\":\"%s\",\"lowPower\":%u,\"otaStatus\":\"%s\","
+  sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\","
+    "\"lowPower\":%u,\"otaStatus\":\"%s\","
     "\"reportInterval\":%u, \"reportCount\":%u, \"sleepInterval\":%u}",
     nodeName.c_str(), lowPower, otaStatus.c_str(), reportInterval,
     reportCount, sleepInterval);
