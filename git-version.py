@@ -11,10 +11,9 @@ def CreateVersion():
     version = Command(["git", "rev-parse", "--short", "HEAD"])
     clean = Command(["git", "status", "-uno", "--porcelain"])
     if clean.strip() != "":
-        version += "!@"
-    else:
-        version += "@"
-    version += time.strftime("%Y%m%d.%H%M%S")
+        version += "!"
     return version
 
-env.Append(BUILD_FLAGS=['-D VERSION=\\\"%s\\\"' % CreateVersion()])
+env.Append(BUILD_FLAGS=[
+    '-D VERSION=\\\"%s\\\"' % CreateVersion()
+    ])
