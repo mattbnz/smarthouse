@@ -175,13 +175,13 @@ void loadConfig() {
 
 // Returns int from file, or defaultVal if not present.
 int readConfigInt(const char* filename, const int defaultVal) {
-  String contents = readConfigString(filename, "0");
+  String contents = readConfigString(filename, "-1");
   int v = atoi(contents.c_str());
   #ifdef DEBUG
   Serial.print(filename);
   Serial.print(" config read: ");
   #endif
-  if (v != 0) {
+  if (v != -1) {
     #ifdef DEBUG
     Serial.println(v);
     #endif
