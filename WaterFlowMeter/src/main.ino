@@ -29,11 +29,12 @@ PubSubClient mqttClient(espClient);
 
 Timer t;
 
-// TODO: Next, make these configurable
-const byte PUMP1_PIN = D1;
-const byte PUMP2_PIN = D5;
+#define NUM_PINS 10
+const uint8_t PIN_MAP[NUM_PINS] = {D0, D1, D2, D3, D4, D5, D6, D7, D8, A0};
 
 struct flowData {
+    uint8_t pin = 0;
+
     volatile byte counter = 0;
 
     float flowRate;
@@ -121,9 +122,6 @@ void setup() {
   Serial.println("Booting");
 #endif
 
-  pinMode(PUMP1_PIN, INPUT);
-  pinMode(PUMP2_PIN, INPUT);
-
   // Load our config from flash.
   loadConfig();
 
@@ -140,8 +138,10 @@ void setup() {
 
   // Kick off the reporting loop and set-up to receive interrupts.
   zeroCounters();
-  attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handleFlow1Interrupt, FALLING);
-  attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handleFlow2Interrupt, FALLING);
+  pinMode(flow1.pin, INPUT);
+  pinMode(flow2.pin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(flow1.pin), handleFlow1Interrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(flow2.pin), handleFlow2Interrupt, FALLING);
   timer_handle = t.every(reportInterval, doReport);
 
 #ifdef DEBUG
@@ -167,6 +167,8 @@ void loadConfig() {
   mqttHost = readConfigString("mqttHost", "mqtt");
   mqttPort = readConfigInt("mqttPort", mqttPort);
   nodeName = readConfigString("nodeName", "WaterFlowMeter");
+  flow1.pin = readConfigInt("flow1Pin", D6);
+  flow2.pin = readConfigInt("flow2Pin", D5);
   // Build cached MQTT topic names
   mqttConfigTopic = mqttConfigTopicName("#");
   mqttCh1Topic = mqttTopicName(MQTT_CH1_SUFFIX);
@@ -239,6 +241,12 @@ bool writeConfig(const char* filename, const String value) {
   }
   f.println(value);
   f.close();
+#ifdef DEBUG
+  Serial.print("Wrote to ");
+  Serial.println(configfile);
+  Serial.print("Contents: ");
+  Serial.println(value);
+#endif
   return true;
 }
 
@@ -329,25 +337,25 @@ void doReport() {
     byte flow2_pulses;
     {
     // Disable interrupts while we read and reset the counter
-    detachInterrupt(digitalPinToInterrupt(PUMP1_PIN));
+    detachInterrupt(digitalPinToInterrupt(flow1.pin));
 
     flow1_now = millis();
     flow1_pulses = flow1.counter;
     flow1.counter = 0;
 
     // Re-enable
-    attachInterrupt(digitalPinToInterrupt(PUMP1_PIN), handleFlow1Interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(flow1.pin), handleFlow1Interrupt, FALLING);
     }
     {
     // Disable interrupts while we read and reset the counter
-    detachInterrupt(digitalPinToInterrupt(PUMP2_PIN));
+    detachInterrupt(digitalPinToInterrupt(flow2.pin));
 
     flow2_now = millis();
     flow2_pulses = flow2.counter;
     flow2.counter = 0;
 
     // Re-enable
-    attachInterrupt(digitalPinToInterrupt(PUMP2_PIN), handleFlow2Interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(flow2.pin), handleFlow2Interrupt, FALLING);
     }
 
     updateStats(&flow1, flow1_pulses, flow1_now);
@@ -410,14 +418,32 @@ void helloAndConfig() {
 #endif
 }
 
+// Converts a numeric pin into a readable description.
+String pinToString(const uint8_t pin) {
+  // Try digital pins first.
+  for (int i=0; i<NUM_PINS-1; i++) {
+    if (PIN_MAP[i] == pin) {
+      return String("D") + String(i, DEC);
+    }
+  }
+  // Then the analog pin we keep at the end.
+  if (PIN_MAP[NUM_PINS-1] == pin) {
+    return String("A0");
+  }
+  // Not known.
+  return String("UNKNOWN");
+}
+
 void sendConfig() {
   char buf[1024];
   sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\",\"ip\":\"%s\","
-    "\"lowPower\":%u,\"otaStatus\":\"%s\",\"reportInterval\":%u,"
-    "\"reportCount\":%u, \"sleepInterval\":%u}",
+    "\"lowPower\":%u,\"otaStatus\":\"%s\","
+    "\"flow1Pin\":\"%s\",\"flow2Pin\":\"%s\","
+    "\"reportInterval\":%u,\"reportCount\":%u, \"sleepInterval\":%u}",
     nodeName.c_str(), WiFi.localIP().toString().c_str(),
-    lowPower, otaStatus.c_str(), reportInterval,
-    reportCount, sleepInterval);
+    lowPower, otaStatus.c_str(),
+    pinToString(flow1.pin).c_str(), pinToString(flow2.pin).c_str(),
+    reportInterval, reportCount, sleepInterval);
   mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
 }
 
@@ -465,6 +491,7 @@ String mqttTopicName(String name) {
   rv.concat(name);
   return rv;
 }
+
 // Helper for a config topic (prepends /config/ to the config name)
 String mqttConfigTopicName(String name) {
   String rv = MQTT_CONFIG_TOPIC;
@@ -472,6 +499,7 @@ String mqttConfigTopicName(String name) {
   return mqttTopicName(rv);
 }
 
+// Process an incoming MQTT message (aka config update)
 void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
 #ifdef DEBUG
   Serial.println("MQTT callback");
@@ -488,17 +516,15 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
   String value = String(buf);
   int ivalue = atoi(value.c_str());
   String stopic = String(topic);
+  bool reboot = false;
   if (stopic.compareTo(mqttConfigTopicName("lowPower")) == 0) {
     if (writeConfig("lowPower", value)) {
       lowPower = (bool)ivalue;
     }
   } else if (stopic.compareTo(mqttConfigTopicName("enableOTA")) == 0) {
     if (writeConfig("enableOTA", value)) {
-      // OTA setup only takes effect on reboot, so force one by abusing the low
-      // power options in memory only to trigger a reset.
-      lowPower = true;
-      sleepInterval = 1000;
-      timeToSleep = true;
+      otaStatus = "updated. rebooting...";
+      reboot = true;  // To reconfigure OTA handlers.
     }
   } else if (stopic.compareTo(mqttConfigTopicName("reportInterval")) == 0) {
     if (writeConfig("reportInterval", value)) {
@@ -535,6 +561,14 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
     if (writeConfig("nodeName", value)) {
       nodeName = value;
     }
+  } else if (stopic.compareTo(mqttConfigTopicName("flow1Pin")) == 0) {
+    if (handlePinConfig("flow1Pin", &flow1.pin, ivalue)) {
+      reboot = true; // To reset interrupt handlers, etc
+    }
+  } else if (stopic.compareTo(mqttConfigTopicName("flow2Pin")) == 0) {
+    if (handlePinConfig("flow2Pin", &flow2.pin, ivalue)) {
+      reboot = true; // To reset interrupt handlers, etc
+    }
   } else {
 #ifdef DEBUG
     Serial.println("Unknown config option received!");
@@ -542,6 +576,28 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
   }
   // Publish our config back so we can verify it was set OK.
   sendConfig();
+  // Reboot if requested.
+  if (reboot) {
+    delay(1000); // make sure config above has time to send.
+    ESP.restart();
+  }
+}
+
+// Helper to process a pin config update
+bool handlePinConfig(const char* varname, uint8_t *livepin, const int ivalue) {
+  if (ivalue <0 || ivalue >= NUM_PINS) {
+    return false;
+  }
+  uint8_t pin = PIN_MAP[ivalue];
+  char cbuf[4];
+  sprintf(cbuf, "%d", int(pin));
+  if (writeConfig(varname, cbuf)) {
+    // make sure the updated config shows this immediate, but the reboot does
+    // the real work of reconfiguring.
+    *livepin = pin;
+    return true;
+  }
+  return false;
 }
 
 // Connect to WiFi if needed.
@@ -596,8 +652,8 @@ void goToSleep() {
 #ifdef DEBUG
   Serial.println("sleeping");
 #endif
-  detachInterrupt(digitalPinToInterrupt(PUMP1_PIN));
-  detachInterrupt(digitalPinToInterrupt(PUMP2_PIN));
+  detachInterrupt(digitalPinToInterrupt(flow1.pin));
+  detachInterrupt(digitalPinToInterrupt(flow2.pin));
   t.stop(timer_handle);
   timer_handle = -1;
   timeToSleep = false;
