@@ -21,6 +21,7 @@
 #define MQTT_TOPIC_PREFIX "smarthouse/"
 #define MQTT_HELLO_TOPIC MQTT_TOPIC_PREFIX "hello"
 #define MQTT_CONFIG_TOPIC "/config/"
+#define MQTT_DEBUG_TOPIC "/debug"
 
 #ifdef DEBUG
   #define VERSION GIT_VERSION "-D"
@@ -238,7 +239,11 @@ void doReport() {
 
     // Now sent the update.
     for (auto s = sensors.begin(); s != sensors.end(); ++s) {
-      String topic = mqttTopicName((*s)->MQTTSuffix());
+      String suffix = (*s)->MQTTSuffix();
+      if (suffix == "") {
+        continue;
+      }
+      String topic = mqttTopicName(suffix);
       mqttClient.publish(topic.c_str(), (*s)->JSON().c_str() , true);
     }
 
@@ -444,6 +449,7 @@ void connectMQTT() {
   } else {
     _D("failed, rc=" + mqttClient.state());
   }
+  _DMQTT(&mqttClient, mqttTopicName(MQTT_DEBUG_TOPIC));
 }
 
 // Turns off everything before we sleep

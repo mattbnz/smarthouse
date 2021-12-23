@@ -14,16 +14,21 @@ void _D(String in) {
 #ifdef DEBUG
   Serial.println(in);
 #endif
+  if (_debugClient != NULL) {
+    _debugClient->publish(_debugTopic.c_str(), in.c_str(), true);
+  }
 }
 void _D(std::string in) {
-#ifdef DEBUG
   _D(String(in.c_str()));
-#endif
 }
 void _D(const char *in) {
-#ifdef DEBUG
   _D(String(in));
-#endif
+}
+
+void _DMQTT(PubSubClient *debugClient, String debugTopic) {
+  _debugClient = debugClient;
+  _debugTopic = debugTopic;
+  _D("Debug logging configured to " + debugTopic);
 }
 
 // Helper to split a string

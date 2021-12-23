@@ -10,11 +10,15 @@
 #include <vector>
 
 #include <LittleFS.h>
+#include <PubSubClient.h>
 
 // Print debug output to Serial (if built with -DDEBUG)
 void _D(String in);
 void _D(std::string in);
 void _D(const char *in);
+void _DMQTT(PubSubClient *debugClient, String debugTopic);
+static PubSubClient *_debugClient;
+static String _debugTopic;
 
 // Helper to split a string
 std::vector<std::string> Split(std::string s, std::string d);
