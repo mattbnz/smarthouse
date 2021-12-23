@@ -6,6 +6,7 @@
 #define Sensor_h
 
 #include <map>
+#include <string>
 
 #include <Arduino.h>
 
