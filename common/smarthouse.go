@@ -11,6 +11,7 @@ import (
     "encoding/json"
     "flag"
     "fmt"
+    "io"
     "log"
     "net/http"
     "net/url"
@@ -33,6 +34,20 @@ type waterCollector struct {
     lastRecord          time.Time
     lastReceived        time.Time
 }
+
+type mqttHello struct {
+    Node string
+    Version string
+    Ip string
+    LowPower int
+    OtaStatus string
+    WifiSSID string
+    SensorSpec string
+    ReportInterval int
+    ReportCount int
+    SleepInterval int
+}
+var hellos = make(map[string]mqttHello)
 
 func NewWaterCollector(nodeName string, flowNum int) waterCollector {
     labels := prometheus.Labels{"node": nodeName, "flow": fmt.Sprintf("%d", flowNum)}
@@ -87,6 +102,17 @@ func (c *waterCollector) Init(mqttClient mqtt.Client) {
         })
 }
 
+func GotHello(client mqtt.Client, msg mqtt.Message) {
+    var hello mqttHello
+    err := json.Unmarshal([]byte(msg.Payload()), &hello)
+    if err != nil {
+        log.Printf("Failed to Unmarshall received hello (%s): %v", string(msg.Payload()), err)
+        return
+    }
+    log.Printf("Got hello from %s", hello.Node)
+    hellos[hello.Node] = hello
+}
+
 func mqttConnect(clientId string, uri *url.URL) mqtt.Client {
 	opts := createClientOptions(clientId, uri)
 	client := mqtt.NewClient(opts)
@@ -109,6 +135,34 @@ func createClientOptions(clientId string, uri *url.URL) *mqtt.ClientOptions {
 	return opts
 }
 
+func reportNodes(w http.ResponseWriter, _ *http.Request) {
+    io.WriteString(w,"<html><body><H1>Nodes</H1>")
+    for _, hello := range hellos {
+        io.WriteString(w, "<h2>" + hello.Node + "</h2><table><tr><th>Setting</th><th>Value</th></tr>")
+        io.WriteString(w, "<tr><th>Version</th><td>" + hello.Version + "</td></tr>")
+        io.WriteString(w, "<tr><th>IP</th><td>" + hello.Ip + "</td></tr>")
+        io.WriteString(w, "<tr><th>WifiSSID</th><td>" + hello.WifiSSID + "</td></tr>")
+        io.WriteString(w, "<tr><th>SensorSpec</th><td>" + hello.SensorSpec + "</td></tr>")
+        io.WriteString(w, "<tr><th>OtaStatus</th><td>" + hello.OtaStatus + "</td></tr>")
+        io.WriteString(w, "<tr><th>ReportInterval</th><td>")
+        io.WriteString(w, fmt.Sprintf("%d", hello.ReportInterval));
+        io.WriteString(w,"</td></tr>")
+        io.WriteString(w, "<tr><th>LowPower</th><td>")
+        io.WriteString(w, fmt.Sprintf("%d", hello.LowPower));
+        io.WriteString(w,"</td></tr>")
+        if (hello.LowPower == 1) {
+            io.WriteString(w, "<tr><th>ReportCount</th><td>")
+            io.WriteString(w, fmt.Sprintf("%d", hello.ReportCount));
+            io.WriteString(w,"</td></tr>")
+            io.WriteString(w, "<tr><th>SleepInterval</th><td>")
+            io.WriteString(w, fmt.Sprintf("%d", hello.SleepInterval));
+            io.WriteString(w,"</td></tr>")
+        }
+        io.WriteString(w, "</table>")
+    }
+    io.WriteString(w, "</body></html>")
+}
+
 func main() {
     flag.Parse()
 
@@ -117,6 +171,9 @@ func main() {
         log.Fatal(err)
     }
     mqtt := mqttConnect("smarthouse", uri)
+
+    mqtt.Subscribe("smarthouse/hello", 0, GotHello)
+
     // TODO: This needs a config file...
     pump1 := NewWaterCollector("pumpmon", 1)
     pump1.Init(mqtt)
@@ -137,5 +194,6 @@ func main() {
 
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
+    http.HandleFunc("/nodes", reportNodes)
     http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), nil)
 }
