@@ -85,6 +85,10 @@ func (c *waterCollector) Init(mqttClient mqtt.Client) {
     prometheus.MustRegister(c.total_mL)
 
     topic := fmt.Sprintf("smarthouse/%s/flow-meter/%d", c.nodeName, c.flowNum)
+    if c.flowNum > 2 {
+        // TODO: What a hack... clean this up.
+        topic = fmt.Sprintf("smarthouse/%s/flow-sensor/%d", c.nodeName, c.flowNum)
+    }
     log.Printf("Subscribing to receive updates for %s", topic)
     mqttClient.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
             var report mqttReport
@@ -180,9 +184,9 @@ func main() {
     mqtt.Subscribe("smarthouse/hello", 0, GotHello)
 
     // TODO: This needs a config file...
-    pump1 := NewWaterCollector("pumpmon", 1)
+    pump1 := NewWaterCollector("pumpmon", 12)
     pump1.Init(mqtt)
-    pump2 := NewWaterCollector("pumpmon", 2)
+    pump2 := NewWaterCollector("pumpmon", 14)
     pump2.Init(mqtt)
     spring1 := NewWaterCollector("spring", 1)
     spring1.Init(mqtt)
