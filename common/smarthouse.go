@@ -15,6 +15,7 @@ import (
     "log"
     "net/http"
     "net/url"
+    "os"
     "time"
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"
@@ -170,7 +171,11 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    mqtt := mqttConnect("smarthouse", uri)
+    hostname, err := os.Hostname()
+    if err != nil {
+        log.Fatal(err)
+    }
+    mqtt := mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
 
     mqtt.Subscribe("smarthouse/hello", 0, GotHello)
 
