@@ -22,6 +22,7 @@
 #define MQTT_HELLO_TOPIC MQTT_TOPIC_PREFIX "hello"
 #define MQTT_CONFIG_TOPIC "/config/"
 #define MQTT_DEBUG_TOPIC "/debug"
+#define MQTT_BUFFER_SIZE 1024
 
 #ifdef DEBUG
   #define VERSION GIT_VERSION "-D"
@@ -276,7 +277,7 @@ void helloAndConfig() {
 }
 
 void sendConfig() {
-  char buf[1024];
+  char buf[MQTT_BUFFER_SIZE];
   sprintf(buf,"{\"node\":\"%s\",\"version\":\"" VERSION "\",\"ip\":\"%s\","
     "\"lowPower\":%u,\"otaStatus\":\"%s\",\"wifiSSID\":\"%s\","
     "\"sensorSpec\":\"%s\","
@@ -447,6 +448,7 @@ void connectMQTT() {
 	
   mqttClient.setServer(mqttHost.c_str(), mqttPort);
   mqttClient.setCallback(handleConfigMsg);
+  mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
   // Attempt to connect
   if (mqttClient.connect(nodeName.c_str())) {
     _D("MQTT connected");
