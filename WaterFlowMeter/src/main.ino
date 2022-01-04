@@ -268,7 +268,6 @@ void helloAndConfig() {
   }
   connectMQTT();
   sendConfig();
-  mqttClient.subscribe(mqttConfigTopic.c_str());
   helloSent = true;
   if (otaMsg) {
     otaStatus = "waiting";
@@ -451,6 +450,9 @@ void connectMQTT() {
   // Attempt to connect
   if (mqttClient.connect(nodeName.c_str())) {
     _D("MQTT connected");
+    if (!mqttClient.subscribe(mqttConfigTopic.c_str())) {
+      _D("Failed to subscribe to config!");
+    }
   } else {
     _D("failed, rc=" + mqttClient.state());
   }
