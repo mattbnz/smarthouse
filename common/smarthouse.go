@@ -37,6 +37,7 @@ type waterCollector struct {
 }
 
 type mqttHello struct {
+    Received time.Time
     Node string
     Version string
     Ip string
@@ -114,6 +115,7 @@ func GotHello(client mqtt.Client, msg mqtt.Message) {
         log.Printf("Failed to Unmarshall received hello (%s): %v", string(msg.Payload()), err)
         return
     }
+    hello.Received = time.Now()
     log.Printf("Got hello from %s", hello.Node)
     hellos[hello.Node] = hello
 }
@@ -144,6 +146,7 @@ func reportNodes(w http.ResponseWriter, _ *http.Request) {
     io.WriteString(w,"<html><body><H1>Nodes</H1>")
     for _, hello := range hellos {
         io.WriteString(w, "<h2>" + hello.Node + "</h2><table><tr><th>Setting</th><th>Value</th></tr>")
+        io.WriteString(w, "<tr><th>Received At</th><td>" + hello.Received.Format(time.RFC3339) + "</td></tr>")
         io.WriteString(w, "<tr><th>Version</th><td>" + hello.Version + "</td></tr>")
         io.WriteString(w, "<tr><th>IP</th><td>" + hello.Ip + "</td></tr>")
         io.WriteString(w, "<tr><th>WifiSSID</th><td>" + hello.WifiSSID + "</td></tr>")
