@@ -244,7 +244,9 @@ void doReport() {
         continue;
       }
       String topic = mqttTopicName(suffix);
-      mqttClient.publish(topic.c_str(), (*s)->JSON().c_str() , true);
+      if (!mqttClient.publish(topic.c_str(), (*s)->JSON().c_str() , true)) {
+        _D(String("Failed to publish report to ") + topic);
+      }
     }
 
     // Update counter, decide if we need to sleep.
@@ -283,7 +285,9 @@ void sendConfig() {
     lowPower, otaStatus.c_str(), wifiSSID.c_str(),
     sensorSpec.c_str(),
     reportInterval, reportCount, sleepInterval);
-  mqttClient.publish(MQTT_HELLO_TOPIC, buf, true);
+  if (!mqttClient.publish(MQTT_HELLO_TOPIC, buf, true)) {
+    _D("Failed to publish config to hello topic!");
+  }
 }
 
 void initOTA() {
