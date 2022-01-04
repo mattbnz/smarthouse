@@ -1,3 +1,9 @@
+smarthouse (0.0~git.202201041338.7ccfa99) internal; urgency=medium
+
+  * Update from git
+
+ -- Matt Brown <mattb@debian.org>  Tue, 04 Jan 2022 13:38:15 +1300
+
 smarthouse (0.0~git.202201032154.7c011fd) internal; urgency=medium
 
   * Update from git
