@@ -206,14 +206,13 @@ func RegisterNode(config mqttHello) {
 
 func UpdateNode(config mqttHello) {
     log.Printf("Got hello from existing node %s", config.Node)
-    oldNode := *nodes[config.Node]
-    node := oldNode
-    node.Config = config
-    if oldNode.Config.SensorSpec != config.SensorSpec {
-        SetupSensors(&node)
+    node := nodes[config.Node]
+    oldSpec := (*node).Config.SensorSpec
+    (*node).Config = config
+    if oldSpec != config.SensorSpec {
+        SetupSensors(node)
     }
-    node.LastContact = time.Now()
-    nodes[config.Node] = &node
+    (*node).LastContact = time.Now()
     log.Printf("Updated %s with %d sensors", config.Node, len(nodes[config.Node].Sensors))
 }
 
