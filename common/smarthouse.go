@@ -8,15 +8,19 @@
 package main
 
 import (
+    "sync/atomic"
     "encoding/json"
     "flag"
     "fmt"
     "io"
     "log"
+    "math"
     "net/http"
     "net/url"
     "os"
+    "strings"
     "time"
+    humanize "github.com/dustin/go-humanize"
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -25,16 +29,7 @@ import (
 
 var httpPort = flag.Int("port", 1510, "HTTP port to listen on")
 var mqttUrl = flag.String("mqtt_url", "tcp://localhost", "URL to the MQTT broker")
-
-type waterCollector struct {
-    nodeName            string
-    flowNum             int
-    currentRate         prometheus.Gauge
-    last60s_mL          prometheus.Counter
-    total_mL            prometheus.Counter
-    lastRecord          time.Time
-    lastReceived        time.Time
-}
+var mqttClient mqtt.Client
 
 type mqttHello struct {
     Received time.Time
@@ -49,28 +44,41 @@ type mqttHello struct {
     ReportCount int
     SleepInterval int
 }
-var hellos = make(map[string]mqttHello)
 
-func NewWaterCollector(nodeName string, flowNum int) waterCollector {
-    labels := prometheus.Labels{"node": nodeName, "flow": fmt.Sprintf("%d", flowNum)}
-    return waterCollector {
-        nodeName:       nodeName,
-        flowNum:        flowNum,
-        currentRate:    prometheus.NewGauge(prometheus.GaugeOpts{
-            Name:     "mL_per_min",
-            Help:     "current (instantaneous) rate of flow in mL/min",
-            ConstLabels:   labels,
-        }),
-        last60s_mL:     prometheus.NewCounter(prometheus.CounterOpts{
-            Name:     "last60s_mL",
-            Help:     "last60s mL passed through sensor in the last minute",
-            ConstLabels:   labels,
-        }),
-        total_mL:       prometheus.NewCounter(prometheus.CounterOpts{
-            Name:     "total_mL",
-            Help:     "total mL passed through sensor",
-            ConstLabels:   labels,
-        }),
+type Node struct {
+    Name string
+    Config mqttHello
+    LastContact time.Time
+    Sensors []Sensor
+}
+var nodes = make(map[string]*Node)
+
+type Sensor interface {
+    Init(mqtt.Client)
+    Shutdown()
+    Describe(bool) string
+}
+
+type flowSensor struct {
+    node                *Node
+    flow                string
+    lastReceived        time.Time
+    // Prometheus exports
+    p_mL_per_min        prometheus.GaugeFunc
+    p_last60s_mL        prometheus.CounterFunc
+    p_total_mL          prometheus.CounterFunc
+    // Actual counters (in bits)
+    mL_per_min          uint64
+    last60s_mL          uint64
+    total_mL            uint64
+}
+func NewFlowSensor(node *Node, flow string) flowSensor {
+    return flowSensor {
+        node:           node,
+        flow:           flow,
+        mL_per_min:     0,
+        last60s_mL:     0,
+        total_mL:       0,
     }
 }
 
@@ -80,32 +88,93 @@ type mqttReport struct {
     Total_mL float64
 }
 
-func (c *waterCollector) Init(mqttClient mqtt.Client) {
-    prometheus.MustRegister(c.currentRate)
-    prometheus.MustRegister(c.last60s_mL)
-    prometheus.MustRegister(c.total_mL)
+func (c *flowSensor) Init(mqttClient mqtt.Client) {
+    labels := prometheus.Labels{"node": c.node.Name, "flow": c.flow}
+    c.p_mL_per_min = prometheus.NewGaugeFunc(
+        prometheus.GaugeOpts{
+            Name:     "mL_per_min",
+            Help:     "current (instantaneous) rate of flow in mL/min",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(atomic.LoadUint64(&c.mL_per_min))
+        },
+    )
+    prometheus.MustRegister(c.p_mL_per_min) // TODO: Better error handling?
+    c.p_last60s_mL = prometheus.NewCounterFunc(
+        prometheus.CounterOpts{
+            Name:     "last60s_mL",
+            Help:     "mL passed through sensor in the last minute",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(atomic.LoadUint64(&c.last60s_mL))
+        },
+    )
+    prometheus.MustRegister(c.p_last60s_mL) // TODO: Better error handling?
+    c.p_total_mL = prometheus.NewCounterFunc(
+        prometheus.CounterOpts{
+            Name:     "total_mL",
+            Help:     "total mL passed through sensor",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(atomic.LoadUint64(&c.total_mL))
+        },
+    )
+    prometheus.MustRegister(c.p_total_mL) // TODO: Better error handling?
 
-    topic := fmt.Sprintf("smarthouse/%s/flow-meter/%d", c.nodeName, c.flowNum)
-    if c.flowNum > 2 {
-        // TODO: What a hack... clean this up.
-        topic = fmt.Sprintf("smarthouse/%s/flow-sensor/%d", c.nodeName, c.flowNum)
-    }
-    log.Printf("Subscribing to receive updates for %s", topic)
+    topic := fmt.Sprintf("smarthouse/%s/flow-sensor/%s", c.node.Name, c.flow)
+    log.Printf("Creating %s (%s)", c.Describe(false), topic)
     mqttClient.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
             var report mqttReport
             err := json.Unmarshal([]byte(msg.Payload()), &report)
+            n := time.Now()
+            c.node.LastContact = n
             if err != nil {
-                log.Printf("Failed to Unmarshall received report (%s): %v", string(msg.Payload()), err)
+                log.Printf("%s Flow %s:Failed to Unmarshall received report (%s): %v",
+                    c.node.Name, c.flow, string(msg.Payload()), err)
                 return;
             }
-            log.Printf("%s Flow %d: Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
-                c.nodeName, c.flowNum, string(msg.Payload()), report.ML_per_min, report.Flow_mL,
+            log.Printf("%s Flow %s: Received MQTT report %s flow_rate=%f, flow_mL=%f, total_mL=%f",
+                c.node.Name, c.flow, string(msg.Payload()), report.ML_per_min, report.Flow_mL,
                 report.Total_mL)
-            c.currentRate.Set(report.ML_per_min)
-            c.last60s_mL.Add(report.Flow_mL)
-            c.total_mL.Add(report.Flow_mL)
+            atomic.StoreUint64(&c.mL_per_min, math.Float64bits(report.ML_per_min))
+            c.add(&c.last60s_mL, report.Flow_mL)
+            c.add(&c.total_mL, report.Flow_mL)
             c.lastReceived = time.Now()
         })
+}
+
+func (c *flowSensor) add(v *uint64, i float64) {
+    for {
+        oBits := atomic.LoadUint64(v)
+        nBits := math.Float64bits(math.Float64frombits(oBits) + i)
+        if (atomic.CompareAndSwapUint64(v, oBits, nBits)) {
+            return
+        }
+    }
+}
+
+func (c *flowSensor) get(v *uint64) float64 {
+    return math.Float64frombits(atomic.LoadUint64(v))
+}
+
+func (c *flowSensor) Shutdown() {
+    prometheus.Unregister(c.p_mL_per_min)
+    prometheus.Unregister(c.p_last60s_mL)
+    prometheus.Unregister(c.p_total_mL)
+    log.Printf("Shutdown %s", c.Describe(false))
+}
+
+func (c *flowSensor) Describe(all bool) string {
+    s := fmt.Sprintf("FlowSensor for %s on %s", c.flow, c.node.Name)
+    if (all) {
+        s += fmt.Sprintf(" @ %s: mL_per_min=%f, last60s_mL=%f, total_mL=%f",
+            c.lastReceived.Format(time.RFC3339), c.get(&c.mL_per_min),
+            c.get(&c.last60s_mL), c.get(&c.total_mL))
+    }
+    return s
 }
 
 func GotHello(client mqtt.Client, msg mqtt.Message) {
@@ -116,8 +185,56 @@ func GotHello(client mqtt.Client, msg mqtt.Message) {
         return
     }
     hello.Received = time.Now()
-    log.Printf("Got hello from %s", hello.Node)
-    hellos[hello.Node] = hello
+    if _, ok := nodes[hello.Node]; ok {
+        UpdateNode(hello)
+    } else {
+        RegisterNode(hello)
+    }
+}
+
+func RegisterNode(config mqttHello) {
+    log.Printf("Got hello from new node %s", config.Node)
+    var node Node
+    node.Name = config.Node
+    node.Config = config
+    node.LastContact = time.Now()
+    SetupSensors(&node)
+    nodes[node.Name] = &node
+    node = *nodes[node.Name]  // Pick up new object from SetupSensors
+    log.Printf("Registered %s with %d sensors", node.Name, len(node.Sensors))
+}
+
+func UpdateNode(config mqttHello) {
+    log.Printf("Got hello from existing node %s", config.Node)
+    oldNode := *nodes[config.Node]
+    node := oldNode
+    node.Config = config
+    if oldNode.Config.SensorSpec != config.SensorSpec {
+        SetupSensors(&node)
+    }
+    node.LastContact = time.Now()
+    nodes[config.Node] = &node
+    log.Printf("Updated %s with %d sensors", config.Node, len(nodes[config.Node].Sensors))
+}
+
+func SetupSensors(node *Node) {
+    // Delete any existing sensor definitions
+    for _, s := range node.Sensors {
+        s.Shutdown()
+    }
+    // Create the new
+    node.Sensors = make([]Sensor, 0)
+    for i, s := range strings.Split(node.Config.SensorSpec, ";") {
+        t := strings.Split(s, ",")
+        if len(t) < 2 {
+            log.Printf("invalid SensorSpec (%s) at position %d for %s", s, i, node.Name)
+            continue
+        }
+        // TODO: Support other sensor types (e.g. look at t[0])
+        fs := NewFlowSensor(node, t[1])
+        fs.Init(mqttClient)
+        node.Sensors = append(node.Sensors, &fs)
+    }
 }
 
 func mqttConnect(clientId string, uri *url.URL) mqtt.Client {
@@ -144,8 +261,13 @@ func createClientOptions(clientId string, uri *url.URL) *mqtt.ClientOptions {
 
 func reportNodes(w http.ResponseWriter, _ *http.Request) {
     io.WriteString(w,"<html><body><H1>Nodes</H1>")
-    for _, hello := range hellos {
-        io.WriteString(w, "<h2>" + hello.Node + "</h2><table><tr><th>Setting</th><th>Value</th></tr>")
+    for _, node := range nodes {
+        hello := node.Config
+        io.WriteString(w, "<h2>" + hello.Node + "</h2>")
+        io.WriteString(w, "<b>Last Contact:</b>&nbsp;&nbsp;<span title=\"" +
+            node.LastContact.Format(time.RFC3339) + "\">" +
+            humanize.RelTime(node.LastContact, time.Now(), "ago", "in the future") + "</span>")
+        io.WriteString(w, "<table><tr><th>Setting</th><th>Value</th></tr>")
         io.WriteString(w, "<tr><th>Received At</th><td>" + hello.Received.Format(time.RFC3339) + "</td></tr>")
         io.WriteString(w, "<tr><th>Version</th><td>" + hello.Version + "</td></tr>")
         io.WriteString(w, "<tr><th>IP</th><td>" + hello.Ip + "</td></tr>")
@@ -167,6 +289,12 @@ func reportNodes(w http.ResponseWriter, _ *http.Request) {
             io.WriteString(w,"</td></tr>")
         }
         io.WriteString(w, "</table>")
+        io.WriteString(w, "<ul>")
+        for _, s := range node.Sensors {
+            io.WriteString(w, "<li>" + s.Describe(true) + "</li>")
+        }
+        io.WriteString(w, "</ul>")
+        io.WriteString(w, "<br/><br/>")
     }
     io.WriteString(w, "</body></html>")
 }
@@ -182,27 +310,9 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    mqtt := mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
+    mqttClient = mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
 
-    mqtt.Subscribe("smarthouse/hello", 0, GotHello)
-
-    // TODO: This needs a config file...
-    pump1 := NewWaterCollector("pumpmon", 15)
-    pump1.Init(mqtt)
-    pump2 := NewWaterCollector("pumpmon", 14)
-    pump2.Init(mqtt)
-    spring1 := NewWaterCollector("spring", 1)
-    spring1.Init(mqtt)
-    spring2 := NewWaterCollector("spring", 2)
-    spring2.Init(mqtt)
-    spring3 := NewWaterCollector("springmon", 1)
-    spring3.Init(mqtt)
-    spring4 := NewWaterCollector("springmon", 2)
-    spring4.Init(mqtt)
-    house1 := NewWaterCollector("housepump", 1)
-    house1.Init(mqtt)
-    house2 := NewWaterCollector("housepump", 2)
-    house2.Init(mqtt)
+    mqttClient.Subscribe("smarthouse/hello", 0, GotHello)
 
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
