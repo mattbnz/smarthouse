@@ -184,7 +184,7 @@ func main() {
     mqtt.Subscribe("smarthouse/hello", 0, GotHello)
 
     // TODO: This needs a config file...
-    pump1 := NewWaterCollector("pumpmon", 12)
+    pump1 := NewWaterCollector("pumpmon", 15)
     pump1.Init(mqtt)
     pump2 := NewWaterCollector("pumpmon", 14)
     pump2.Init(mqtt)
