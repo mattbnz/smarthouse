@@ -97,7 +97,7 @@ func (c *flowSensor) Init(mqttClient mqtt.Client) {
             ConstLabels:   labels,
         },
         func() float64 {
-            return float64(atomic.LoadUint64(&c.mL_per_min))
+            return float64(math.Float64frombits(atomic.LoadUint64(&c.mL_per_min)))
         },
     )
     prometheus.MustRegister(c.p_mL_per_min) // TODO: Better error handling?
@@ -108,7 +108,7 @@ func (c *flowSensor) Init(mqttClient mqtt.Client) {
             ConstLabels:   labels,
         },
         func() float64 {
-            return float64(atomic.LoadUint64(&c.last60s_mL))
+            return float64(math.Float64frombits(atomic.LoadUint64(&c.last60s_mL)))
         },
     )
     prometheus.MustRegister(c.p_last60s_mL) // TODO: Better error handling?
@@ -119,7 +119,7 @@ func (c *flowSensor) Init(mqttClient mqtt.Client) {
             ConstLabels:   labels,
         },
         func() float64 {
-            return float64(atomic.LoadUint64(&c.total_mL))
+            return float64(math.Float64frombits(atomic.LoadUint64(&c.total_mL)))
         },
     )
     prometheus.MustRegister(c.p_total_mL) // TODO: Better error handling?
