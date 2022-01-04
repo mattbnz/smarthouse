@@ -21,7 +21,7 @@ void FlowSensor::Setup() {
 
   pinMode(pin, INPUT);
   interruptPtr= std::bind( &FlowSensor::handleInterrupt, this);
-  attachInterrupt(digitalPinToInterrupt(pin), interruptPtr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pin), interruptPtr, RISING);
 }
 
 void FlowSensor::Shutdown() {
@@ -37,7 +37,7 @@ void FlowSensor::Collect() {
   pulses = 0;
 
   // Re-enable
-  attachInterrupt(digitalPinToInterrupt(pin), interruptPtr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pin), interruptPtr, RISING);
 
   // Now calculate the flow rate, etc.
   if (p > 0) {
