@@ -127,21 +127,22 @@ void loadSensors() {
   std::vector<std::string> sensorSpecs = Split(sensorSpec.c_str(), ";");
   for (std::string s: sensorSpecs) {
     std::vector<std::string> parts = Split(s, ",");
-    if (parts.size() != 2) {
+    if (parts.size() != 3) {
       _D("Ignoring bad sensor spec: " + s);
       continue;
     }
     auto fact = SensorFactory::getFactory();
-    auto pin = PIN_MAP.find(parts[1]);
-    if (!fact->Exists(parts[0])) {
-        _D("Ignoring sensor spec with unknown sensor " + s + " (" + parts[0] + ")");
+    auto pin = PIN_MAP.find(parts[2]);
+    if (!fact->Exists(parts[1])) {
+        _D("Ignoring sensor spec with unknown sensor " + s + " (" + parts[1] + ")");
         continue;
     } else if (pin == PIN_MAP.end()) {
-        _D("Ignoring sensor spec with unknown pin " + s + " (" + parts[1] + ")");
+        _D("Ignoring sensor spec with unknown pin " + s + " (" + parts[2] + ")");
         continue;
     } else {
-      sensors.push_back(fact->Create(parts[0], pin->second));
-      _D("Created sensor for " + parts[0] + " on pin " + String(pin->second).c_str());
+      sensors.push_back(fact->Create(parts[1], parts[0], pin->second));
+      _D("Created " + parts[1] + " sensor for " + parts[0] + " on pin " +
+         String(pin->second).c_str());
     }
   }
   _D(String("Sensors Configured: ") + String(sensors.size()));

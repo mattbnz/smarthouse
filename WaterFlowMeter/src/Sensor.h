@@ -15,7 +15,7 @@ class Sensor {
 
   public:
     Sensor() {};
-    Sensor(const uint8_t pin_in);
+    Sensor(const std::string name_in, const uint8_t pin_in);
 
     virtual String Describe();
     virtual String JSON();
@@ -28,30 +28,31 @@ class Sensor {
     static std::string SensorType() { return "Sensor"; };
   protected:
     std::string instance;
+    std::string name;
     uint8_t pin;
 };
 
 // Factory Class
 class SensorFactory {
   public:
-    typedef Sensor* (*t_pFactory)(const uint8_t);
+    typedef Sensor* (*t_pFactory)(const std::string, const uint8_t);
 
     static SensorFactory *getFactory() {
       static SensorFactory factory;
       return &factory;
     };
 
-    std::string Register(std::string name, t_pFactory Creator) {
-      fMap[name] = Creator;
-      return name;
+    std::string Register(std::string type, t_pFactory Creator) {
+      fMap[type] = Creator;
+      return type;
     };
 
-    Sensor *Create(std::string name, uint8_t pin) {
-      return fMap[name](pin);
+    Sensor *Create(std::string type, const std::string name, const uint8_t pin) {
+      return fMap[type](name, pin);
     };
 
-    bool Exists(std::string name) {
-      return fMap.find(name) != fMap.end();
+    bool Exists(std::string type) {
+      return fMap.find(type) != fMap.end();
     }
 
     std::map<std::string, t_pFactory> fMap;
@@ -61,13 +62,15 @@ class SensorFactory {
 template <typename IMPL>
 class SensorTmpl: public virtual Sensor {
   public:
-    static Sensor* Create(const uint8_t pin) { return new IMPL(pin); }
-    static const std::string NAME;
+    static Sensor* Create(const std::string name, const uint8_t pin) {
+      return new IMPL(name, pin);
+    }
+    static const std::string TYPE;
   protected:
-    SensorTmpl() : Sensor {} { instance = NAME; }
+    SensorTmpl() : Sensor {} { instance = TYPE; }
 };
 template <typename IMPL>
-const std::string SensorTmpl<IMPL>::NAME = SensorFactory::getFactory()->Register(
+const std::string SensorTmpl<IMPL>::TYPE = SensorFactory::getFactory()->Register(
     IMPL::SensorType(), &SensorTmpl<IMPL>::Create);
 
 #endif

@@ -43,7 +43,7 @@ class FlowSensor: public virtual Sensor {
 // Sensor class for a YFB-10 style flow sensor.
 class YFB10FlowSensor: public FlowSensor, SensorTmpl<YFB10FlowSensor> {
   public:
-    YFB10FlowSensor(const uint8_t pin_in) : Sensor { pin_in } {}
+    YFB10FlowSensor(const std::string name_in, const uint8_t pin_in) : Sensor {name_in, pin_in} {}
 
     static std::string SensorType() { return "YFB10FlowSensor"; };
 
@@ -54,7 +54,7 @@ class YFB10FlowSensor: public FlowSensor, SensorTmpl<YFB10FlowSensor> {
 // Sensor class for a FS400A style flow sensor.
 class FS400AFlowSensor: public FlowSensor, SensorTmpl<FS400AFlowSensor> {
   public:
-    FS400AFlowSensor(const uint8_t pin_in) : Sensor {pin_in } {}
+    FS400AFlowSensor(const std::string name_in, const uint8_t pin_in) : Sensor {name_in, pin_in} {}
 
     static std::string SensorType() { return "FS400AFlowSensor"; };
   private:

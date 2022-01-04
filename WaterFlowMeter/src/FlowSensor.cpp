@@ -72,7 +72,7 @@ String FlowSensor::JSON() {
 }
 
 String FlowSensor::MQTTSuffix() {
-  return String("/flow-sensor/") + String(pin, 10);
+  return String("/flow-sensor/") + name.c_str();
 }
 
 float FlowSensor::pulseToL(byte p) {

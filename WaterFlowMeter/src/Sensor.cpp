@@ -4,12 +4,13 @@
  */
 #include "Sensor.h"
 
-Sensor::Sensor(const uint8_t pin_in) {
+Sensor::Sensor(const std::string name_in, const uint8_t pin_in) {
+  name = name_in;
   pin = pin_in;
 }
 
 String Sensor::Describe() {
-  return String(instance.c_str()) + "@" + String(pin, 10);
+  return String(instance.c_str()) + "for " + name.c_str() + " on " + String(pin, 10);
 }
 
 String Sensor::JSON() {

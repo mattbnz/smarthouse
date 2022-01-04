@@ -224,14 +224,15 @@ func SetupSensors(node *Node) {
     }
     // Create the new
     node.Sensors = make([]Sensor, 0)
+    // SensorSpec should conform to: NAME,TYPE,PIN[;NAME,TYPE,PIN]...
     for i, s := range strings.Split(node.Config.SensorSpec, ";") {
         t := strings.Split(s, ",")
-        if len(t) < 2 {
+        if len(t) < 3 {
             log.Printf("invalid SensorSpec (%s) at position %d for %s", s, i, node.Name)
             continue
         }
-        // TODO: Support other sensor types (e.g. look at t[0])
-        fs := NewFlowSensor(node, t[1])
+        // TODO: Support other sensor types (e.g. look at t[1])
+        fs := NewFlowSensor(node, t[0])
         fs.Init(mqttClient)
         node.Sensors = append(node.Sensors, &fs)
     }
