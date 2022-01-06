@@ -17,6 +17,7 @@
 #include "util.h"
 #include "Sensor.h"
 #include "FlowSensor.h"
+#include "Ecomist.h"
 
 #define MQTT_TOPIC_PREFIX "smarthouse/"
 #define MQTT_HELLO_TOPIC MQTT_TOPIC_PREFIX "hello"
