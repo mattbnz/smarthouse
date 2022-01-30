@@ -177,6 +177,7 @@ func (c *flowSensor) Shutdown() {
     prometheus.Unregister(c.p_mL_per_min)
     prometheus.Unregister(c.p_last60s_mL)
     prometheus.Unregister(c.p_total_mL)
+    prometheus.Unregister(c.p_reportAge)
     log.Printf("Shutdown %s", c.Describe(false))
 }
 
