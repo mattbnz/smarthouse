@@ -6,6 +6,8 @@ logs
 logs/*
 common/jeelogger
 common/jeelogger.mips
+common/mlogger
+common/signaller.mips
 build-uno/
 build-uno/*
 build-mega2560
