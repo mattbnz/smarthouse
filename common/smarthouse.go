@@ -67,6 +67,7 @@ type flowSensor struct {
     p_mL_per_min        prometheus.GaugeFunc
     p_last60s_mL        prometheus.CounterFunc
     p_total_mL          prometheus.CounterFunc
+    p_reportAge         prometheus.GaugeFunc
     // Actual counters (in bits)
     mL_per_min          uint64
     last60s_mL          uint64
@@ -79,6 +80,7 @@ func NewFlowSensor(node *Node, flow string) flowSensor {
         mL_per_min:     0,
         last60s_mL:     0,
         total_mL:       0,
+        lastReceived:   time.Unix(0, 0),
     }
 }
 
@@ -123,6 +125,17 @@ func (c *flowSensor) Init(mqttClient mqtt.Client) {
         },
     )
     prometheus.MustRegister(c.p_total_mL) // TODO: Better error handling?
+    c.p_reportAge = prometheus.NewGaugeFunc(
+        prometheus.GaugeOpts{
+            Name:     "report_age_s",
+            Help:     "Seconds since the node last provided data",
+            ConstLabels:    labels,
+        },
+        func() float64 {
+            return time.Now().Sub(c.node.LastContact).Seconds()
+        },
+    )
+    prometheus.MustRegister(c.p_reportAge) // TODO: Better error handling?
 
     topic := fmt.Sprintf("smarthouse/%s/flow-sensor/%s", c.node.Name, c.flow)
     log.Printf("Creating %s (%s)", c.Describe(false), topic)
