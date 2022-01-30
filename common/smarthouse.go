@@ -323,6 +323,11 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
+
+    mqtt.ERROR = log.New(os.Stdout, "[MQTT-ERROR] ", 0)
+    mqtt.CRITICAL = log.New(os.Stdout, "[MQTT-CRIT] ", 0)
+    mqtt.WARN = log.New(os.Stdout, "[MQTT-WARN]  ", 0)
+
     mqttClient = mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
 
     mqttClient.Subscribe("smarthouse/hello", 0, GotHello)
