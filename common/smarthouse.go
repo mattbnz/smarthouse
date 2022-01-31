@@ -76,7 +76,7 @@ type flowSensor struct {
     last60s_mL          uint64
     total_mL            uint64
 }
-func NewFlowSensor(node *Node, flow string) flowSensor {
+func NewFlowSensor(node *Node, flow string) *flowSensor {
     s := flowSensor {
         node:           node,
         topic:          fmt.Sprintf("smarthouse/%s/flow-sensor/%s", node.Name, flow),
@@ -132,7 +132,7 @@ func NewFlowSensor(node *Node, flow string) flowSensor {
     )
     prometheus.MustRegister(s.p_reportAge) // TODO: Better error handling?
     log.Printf("Creating %s (%s)", s.Describe(false), s.topic)
-    return s
+    return &s
 }
 
 type mqttReport struct {
@@ -271,7 +271,7 @@ func SetupSensors(client mqtt.Client, node *Node) {
         // TODO: Support other sensor types (e.g. look at t[1])
         fs := NewFlowSensor(node, t[0])
         fs.Subscribe(client)
-        node.Sensors = append(node.Sensors, &fs)
+        node.Sensors = append(node.Sensors, fs)
     }
 }
 
