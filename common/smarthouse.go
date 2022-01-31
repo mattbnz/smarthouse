@@ -295,6 +295,11 @@ func mqttConnAttempt(_ *url.URL, t *tls.Config) *tls.Config {
 func mqttConnected(c mqtt.Client) {
     log.Printf("MQTT connected")
 
+    // TODO: Work out how to improve this as if we get a buffered hello for a new node
+    // then we'll subscribe as part of the Sensor creation from that, and then Unsubscribe
+    // and resubscribe when ResubscribeSensors is called...
+    // Need to find a way to work out if a subscription is still valid and not act in that
+    // case. Minimal negative impact to leave as is for now though.
     c.Subscribe("smarthouse/hello", 0, GotHello)
     ResubscribeSensors(c)
 }
