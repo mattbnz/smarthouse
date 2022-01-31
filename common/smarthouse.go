@@ -20,6 +20,7 @@ import (
     "os"
     "strings"
     "time"
+    "crypto/tls"
     humanize "github.com/dustin/go-humanize"
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"
@@ -29,7 +30,6 @@ import (
 
 var httpPort = flag.Int("port", 1510, "HTTP port to listen on")
 var mqttUrl = flag.String("mqtt_url", "tcp://localhost", "URL to the MQTT broker")
-var mqttClient mqtt.Client
 
 type mqttHello struct {
     Received time.Time
@@ -54,13 +54,16 @@ type Node struct {
 var nodes = make(map[string]*Node)
 
 type Sensor interface {
-    Init(mqtt.Client)
-    Shutdown()
+    Subscribe(mqtt.Client)
+    Unsubscribe(mqtt.Client)
+    Shutdown(mqtt.Client)
     Describe(bool) string
 }
 
 type flowSensor struct {
     node                *Node
+    topic               string
+    token               mqtt.Token
     flow                string
     lastReceived        time.Time
     // Prometheus exports
@@ -74,14 +77,62 @@ type flowSensor struct {
     total_mL            uint64
 }
 func NewFlowSensor(node *Node, flow string) flowSensor {
-    return flowSensor {
+    s := flowSensor {
         node:           node,
+        topic:          fmt.Sprintf("smarthouse/%s/flow-sensor/%s", node.Name, flow),
         flow:           flow,
         mL_per_min:     0,
         last60s_mL:     0,
         total_mL:       0,
         lastReceived:   time.Unix(0, 0),
     }
+    labels := prometheus.Labels{"node": node.Name, "flow": flow}
+    s.p_mL_per_min = prometheus.NewGaugeFunc(
+        prometheus.GaugeOpts{
+            Name:     "mL_per_min",
+            Help:     "current (instantaneous) rate of flow in mL/min",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(math.Float64frombits(atomic.LoadUint64(&s.mL_per_min)))
+        },
+    )
+    prometheus.MustRegister(s.p_mL_per_min) // TODO: Better error handling?
+    s.p_last60s_mL = prometheus.NewCounterFunc(
+        prometheus.CounterOpts{
+            Name:     "last60s_mL",
+            Help:     "mL passed through sensor in the last minute",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(math.Float64frombits(atomic.LoadUint64(&s.last60s_mL)))
+        },
+    )
+    prometheus.MustRegister(s.p_last60s_mL) // TODO: Better error handling?
+    s.p_total_mL = prometheus.NewCounterFunc(
+        prometheus.CounterOpts{
+            Name:     "total_mL",
+            Help:     "total mL passed through sensor",
+            ConstLabels:   labels,
+        },
+        func() float64 {
+            return float64(math.Float64frombits(atomic.LoadUint64(&s.total_mL)))
+        },
+    )
+    prometheus.MustRegister(s.p_total_mL) // TODO: Better error handling?
+    s.p_reportAge = prometheus.NewGaugeFunc(
+        prometheus.GaugeOpts{
+            Name:     "report_age_s",
+            Help:     "Seconds since the node last provided data",
+            ConstLabels:    labels,
+        },
+        func() float64 {
+            return time.Now().Sub(s.node.LastContact).Seconds()
+        },
+    )
+    prometheus.MustRegister(s.p_reportAge) // TODO: Better error handling?
+    log.Printf("Creating %s (%s)", s.Describe(false), s.topic)
+    return s
 }
 
 type mqttReport struct {
@@ -90,62 +141,17 @@ type mqttReport struct {
     Total_mL float64
 }
 
-func (c *flowSensor) Init(mqttClient mqtt.Client) {
-    labels := prometheus.Labels{"node": c.node.Name, "flow": c.flow}
-    c.p_mL_per_min = prometheus.NewGaugeFunc(
-        prometheus.GaugeOpts{
-            Name:     "mL_per_min",
-            Help:     "current (instantaneous) rate of flow in mL/min",
-            ConstLabels:   labels,
-        },
-        func() float64 {
-            return float64(math.Float64frombits(atomic.LoadUint64(&c.mL_per_min)))
-        },
-    )
-    prometheus.MustRegister(c.p_mL_per_min) // TODO: Better error handling?
-    c.p_last60s_mL = prometheus.NewCounterFunc(
-        prometheus.CounterOpts{
-            Name:     "last60s_mL",
-            Help:     "mL passed through sensor in the last minute",
-            ConstLabels:   labels,
-        },
-        func() float64 {
-            return float64(math.Float64frombits(atomic.LoadUint64(&c.last60s_mL)))
-        },
-    )
-    prometheus.MustRegister(c.p_last60s_mL) // TODO: Better error handling?
-    c.p_total_mL = prometheus.NewCounterFunc(
-        prometheus.CounterOpts{
-            Name:     "total_mL",
-            Help:     "total mL passed through sensor",
-            ConstLabels:   labels,
-        },
-        func() float64 {
-            return float64(math.Float64frombits(atomic.LoadUint64(&c.total_mL)))
-        },
-    )
-    prometheus.MustRegister(c.p_total_mL) // TODO: Better error handling?
-    c.p_reportAge = prometheus.NewGaugeFunc(
-        prometheus.GaugeOpts{
-            Name:     "report_age_s",
-            Help:     "Seconds since the node last provided data",
-            ConstLabels:    labels,
-        },
-        func() float64 {
-            return time.Now().Sub(c.node.LastContact).Seconds()
-        },
-    )
-    prometheus.MustRegister(c.p_reportAge) // TODO: Better error handling?
-
-    topic := fmt.Sprintf("smarthouse/%s/flow-sensor/%s", c.node.Name, c.flow)
-    log.Printf("Creating %s (%s)", c.Describe(false), topic)
-    mqttClient.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
+func (c *flowSensor) Subscribe(mqttClient mqtt.Client) {
+    if c.token != nil {
+        c.Unsubscribe(mqttClient)
+    }
+    c.token = mqttClient.Subscribe(c.topic, 0, func(client mqtt.Client, msg mqtt.Message) {
             var report mqttReport
             err := json.Unmarshal([]byte(msg.Payload()), &report)
             n := time.Now()
             c.node.LastContact = n
             if err != nil {
-                log.Printf("%s Flow %s:Failed to Unmarshall received report (%s): %v",
+                log.Printf("%s Flow %s: Failed to Unmarshall received report (%s): %v",
                     c.node.Name, c.flow, string(msg.Payload()), err)
                 return;
             }
@@ -157,6 +163,23 @@ func (c *flowSensor) Init(mqttClient mqtt.Client) {
             c.add(&c.total_mL, report.Flow_mL)
             c.lastReceived = time.Now()
         })
+    for !c.token.WaitTimeout(3 * time.Second) {}
+    if err := c.token.Error(); err != nil {
+        log.Printf("Failed to subscribe to %s", c.topic)
+        c.token = nil
+        return
+    }
+    log.Printf("%s Flow %s: Subscribed to %s", c.node.Name, c.flow, c.topic)
+}
+
+func (c *flowSensor) Unsubscribe(mqttClient mqtt.Client) {
+    t := mqttClient.Unsubscribe(c.topic)
+    for !t.WaitTimeout(3 * time.Second) {}
+    if err := t.Error(); err != nil {
+        log.Printf("Failed to unsubscribe from %s", c.topic)
+        return
+    }
+    c.token = nil
 }
 
 func (c *flowSensor) add(v *uint64, i float64) {
@@ -173,11 +196,12 @@ func (c *flowSensor) get(v *uint64) float64 {
     return math.Float64frombits(atomic.LoadUint64(v))
 }
 
-func (c *flowSensor) Shutdown() {
+func (c *flowSensor) Shutdown(mqttClient mqtt.Client) {
     prometheus.Unregister(c.p_mL_per_min)
     prometheus.Unregister(c.p_last60s_mL)
     prometheus.Unregister(c.p_total_mL)
     prometheus.Unregister(c.p_reportAge)
+    c.Unsubscribe(mqttClient)
     log.Printf("Shutdown %s", c.Describe(false))
 }
 
@@ -200,40 +224,40 @@ func GotHello(client mqtt.Client, msg mqtt.Message) {
     }
     hello.Received = time.Now()
     if _, ok := nodes[hello.Node]; ok {
-        UpdateNode(hello)
+        UpdateNode(client, hello)
     } else {
-        RegisterNode(hello)
+        RegisterNode(client, hello)
     }
 }
 
-func RegisterNode(config mqttHello) {
+func RegisterNode(client mqtt.Client, config mqttHello) {
     log.Printf("Got hello from new node %s", config.Node)
     var node Node
     node.Name = config.Node
     node.Config = config
     node.LastContact = time.Now()
-    SetupSensors(&node)
+    SetupSensors(client, &node)
     nodes[node.Name] = &node
     node = *nodes[node.Name]  // Pick up new object from SetupSensors
     log.Printf("Registered %s with %d sensors", node.Name, len(node.Sensors))
 }
 
-func UpdateNode(config mqttHello) {
+func UpdateNode(client mqtt.Client, config mqttHello) {
     log.Printf("Got hello from existing node %s", config.Node)
     node := nodes[config.Node]
     oldSpec := (*node).Config.SensorSpec
     (*node).Config = config
     if oldSpec != config.SensorSpec {
-        SetupSensors(node)
+        SetupSensors(client, node)
     }
     (*node).LastContact = time.Now()
     log.Printf("Updated %s with %d sensors", config.Node, len(nodes[config.Node].Sensors))
 }
 
-func SetupSensors(node *Node) {
+func SetupSensors(client mqtt.Client, node *Node) {
     // Delete any existing sensor definitions
     for _, s := range node.Sensors {
-        s.Shutdown()
+        s.Shutdown(client)
     }
     // Create the new
     node.Sensors = make([]Sensor, 0)
@@ -246,9 +270,33 @@ func SetupSensors(node *Node) {
         }
         // TODO: Support other sensor types (e.g. look at t[1])
         fs := NewFlowSensor(node, t[0])
-        fs.Init(mqttClient)
+        fs.Subscribe(client)
         node.Sensors = append(node.Sensors, &fs)
     }
+}
+
+func ResubscribeSensors(client mqtt.Client) {
+    for _, node := range nodes {
+        for _, s := range node.Sensors {
+            s.Subscribe(client)
+        }
+    }
+}
+
+func mqttConnLost(c mqtt.Client, e error) {
+    log.Printf("MQTT connection lost: %s", e)
+}
+
+func mqttConnAttempt(_ *url.URL, t *tls.Config) *tls.Config {
+    log.Printf("Attempting MQTT connection")
+    return t
+}
+
+func mqttConnected(c mqtt.Client) {
+    log.Printf("MQTT connected")
+
+    c.Subscribe("smarthouse/hello", 0, GotHello)
+    ResubscribeSensors(c)
 }
 
 func mqttConnect(clientId string, uri *url.URL) mqtt.Client {
@@ -270,6 +318,9 @@ func createClientOptions(clientId string, uri *url.URL) *mqtt.ClientOptions {
 	password, _ := uri.User.Password()
 	opts.SetPassword(password)
 	opts.SetClientID(clientId)
+    opts.SetConnectionAttemptHandler(mqttConnAttempt)
+    opts.SetConnectionLostHandler(mqttConnLost)
+    opts.SetOnConnectHandler(mqttConnected)
 	return opts
 }
 
@@ -329,9 +380,7 @@ func main() {
     mqtt.CRITICAL = log.New(os.Stdout, "[MQTT-CRIT] ", 0)
     mqtt.WARN = log.New(os.Stdout, "[MQTT-WARN]  ", 0)
 
-    mqttClient = mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
-
-    mqttClient.Subscribe("smarthouse/hello", 0, GotHello)
+    mqttConnect(fmt.Sprintf("smarthouse.%s", hostname), uri)
 
     log.Print("Starting HTTP server...")
     http.Handle("/metrics", promhttp.Handler())
