@@ -89,8 +89,12 @@ func main() {
 	centralSystem.SetSmartChargingHandler(handler)
 	// Add handlers for dis/connection of charge points
 	centralSystem.SetNewChargePointHandler(func(chargePoint ocpp16.ChargePointConnection) {
-		handler.chargePoints[chargePoint.ID()] = &ChargePointState{Connectors: map[int]*ConnectorInfo{}, Transactions: map[int]*TransactionInfo{}}
-		infoLog.WithField("client", chargePoint.ID()).Infof("new charge point connected from %s", chargePoint.RemoteAddr())
+		if _, exists := handler.chargePoints[chargePoint.ID()]; exists {
+			infoLog.WithField("client", chargePoint.ID()).Infof("charge point reconnected from %s", chargePoint.RemoteAddr())
+		} else {
+			handler.chargePoints[chargePoint.ID()] = &ChargePointState{Connectors: map[int]*ConnectorInfo{}, Transactions: map[int]*TransactionInfo{}}
+			infoLog.WithField("client", chargePoint.ID()).Infof("new charge point connected from %s", chargePoint.RemoteAddr())
+		}
 		go requestConfiguration(chargePoint.ID(), handler)
 	})
 	centralSystem.SetChargePointDisconnectedHandler(func(chargePoint ocpp16.ChargePointConnection) {
