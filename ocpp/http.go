@@ -33,6 +33,10 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<b>Diag Status:</b> " + cp.DiagnosticsStatus + "<br>"))
 		w.Write([]byte("<b>Firmware Status:</b> " + cp.FirmwareStatus + "<br>"))
 
+		w.Write([]byte(fmt.Sprintf(`<form method="post" action="/reset/%s">`, id)))
+		w.Write([]byte(`<input type="submit" value="Reset">`))
+		w.Write([]byte(`</form>`))
+
 		w.Write([]byte("<h2>Configuration</h2><table>"))
 		w.Write([]byte("<tr><th>Key</th><th>Value</th></tr>"))
 		for _, k := range cp.ConfigKeys {
@@ -70,9 +74,6 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write([]byte("</table>"))
 
-		w.Write([]byte(fmt.Sprintf(`<form method="post" action="/reset/%s">`, id)))
-		w.Write([]byte(`<input type="submit" value="Reset">`))
-		w.Write([]byte(`</form>`))
 	}
 
 	w.Write([]byte("</body></html>"))
