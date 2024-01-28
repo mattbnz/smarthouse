@@ -108,6 +108,13 @@ func (s *Store) Restore() (err error) {
 		return
 	}
 	s.handler.chargePoints = cp
+	for _, p := range s.handler.chargePoints {
+		for _, t := range p.Transactions {
+			if t.ID >= nextTransactionId {
+				nextTransactionId = t.ID + 1
+			}
+		}
+	}
 	infoLog.Infof("Restored %d charge points from state", len(s.handler.chargePoints))
 	return nil
 }

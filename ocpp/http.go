@@ -47,12 +47,12 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<h2>Connectors</h2><ul>"))
 		for cID, c := range cp.Connectors {
 			w.Write([]byte(fmt.Sprintf("<li>%d - %s", cID, c.Status)))
-			if c.Status == core.ChargePointStatusPreparing {
+			if c.hasTransactionInProgress() {
+				w.Write([]byte(fmt.Sprintf(" - Current Transaction: %d", c.CurrentTransaction)))
+			} else {
 				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/start/%s/%d">`, id, cID)))
 				w.Write([]byte(`<input type="submit" value="Start">`))
 				w.Write([]byte(`</form>`))
-			} else if c.Status != core.ChargePointStatusAvailable {
-				w.Write([]byte(fmt.Sprintf(" - Current Transaction: %d", c.CurrentTransaction)))
 			}
 			w.Write([]byte("</li>"))
 
