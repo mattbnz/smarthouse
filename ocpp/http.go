@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"time"
 
 	"github.com/lorenzodonini/ocpp-go/ocpp1.6/core"
 	"github.com/lorenzodonini/ocpp-go/ocpp1.6/types"
@@ -49,11 +50,15 @@ func Index(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(fmt.Sprintf("<li>%d - %s", cID, c.Status)))
 			if c.hasTransactionInProgress() {
 				w.Write([]byte(fmt.Sprintf(" - Current Transaction: %d", c.CurrentTransaction)))
+				if time.Since(c.MeasurementTime) < 30*time.Second {
+					w.Write([]byte(fmt.Sprintf(" providing %.1fW @ %.1fV / %.1fA", c.LastMeasurement.ActivePower, c.LastMeasurement.Voltage, c.LastMeasurement.Current)))
+				}
 			} else {
 				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/start/%s/%d">`, id, cID)))
 				w.Write([]byte(`<input type="submit" value="Start">`))
 				w.Write([]byte(`</form>`))
 			}
+
 			w.Write([]byte("</li>"))
 
 		}
@@ -62,9 +67,17 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<h2>Transactions</h2><table>"))
 		w.Write([]byte("<tr><th>ID</th><th>Connector</th><th>Tag</th><th>Start</th><th>End</th><th>Start Meter</th><th>End Meter</th><th></th></tr>"))
 		for tID, t := range cp.Transactions {
-			w.Write([]byte(fmt.Sprintf("<tr><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>%d</td>",
-				tID, t.ConnectorId, t.IDTag, t.StartTime, t.EndTime, t.StartMeter, t.EndMeter)))
-			w.Write([]byte("<td>"))
+			w.Write([]byte(fmt.Sprintf("<tr><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>",
+				tID, t.ConnectorId, t.IDTag, t.StartTime, t.EndTime, t.StartMeter)))
+			if time.Since(t.MeasurementTime) < 30*time.Second {
+				w.Write([]byte(fmt.Sprintf("providing %.1fW @ %.1fV / %.1fA", t.LastMeasurement.ActivePower, t.LastMeasurement.Voltage, t.LastMeasurement.Current)))
+				w.Write([]byte(fmt.Sprintf(" (total %d W since start)", t.LastMeasurement.MeterReading-int64(t.StartMeter))))
+			} else {
+				if t.EndMeter > 0 {
+					w.Write([]byte(fmt.Sprintf("%d (%d W supplied)", t.EndMeter, t.EndMeter-t.StartMeter)))
+				}
+			}
+			w.Write([]byte("</td><td>"))
 			if t.EndTime == nil || t.EndTime.IsZero() {
 				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/stop/%s/%d">`, id, tID)))
 				w.Write([]byte(`<input type="submit" value="Stop">`))

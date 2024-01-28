@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -15,6 +16,14 @@ var (
 	nextTransactionId = 0
 )
 
+// Measurement contains a summary of the measurement info available
+type Measurement struct {
+	Voltage      float64 // from Voltage
+	Current      float64 // from Current.Import
+	ActivePower  float64 // from Power.Active.Import
+	MeterReading int64   // from Energy.Active.Import.Register
+}
+
 // TransactionInfo contains info about a transaction
 type TransactionInfo struct {
 	ID          int
@@ -24,6 +33,9 @@ type TransactionInfo struct {
 	EndMeter    int
 	ConnectorId int
 	IDTag       string
+
+	LastMeasurement *Measurement
+	MeasurementTime time.Time
 }
 
 func (ti *TransactionInfo) hasTransactionEnded() bool {
@@ -34,6 +46,9 @@ func (ti *TransactionInfo) hasTransactionEnded() bool {
 type ConnectorInfo struct {
 	Status             core.ChargePointStatus
 	CurrentTransaction int
+
+	LastMeasurement *Measurement
+	MeasurementTime time.Time
 }
 
 func (ci *ConnectorInfo) hasTransactionInProgress() bool {
@@ -97,9 +112,47 @@ func (handler *CentralSystemHandler) OnHeartbeat(chargePointId string, request *
 	return core.NewHeartbeatConfirmation(types.NewDateTime(time.Now())), nil
 }
 
+func (handler *CentralSystemHandler) processMeterValues(chargePointId string, connectorId, transactionId int, mv types.MeterValue) {
+	info, ok := handler.chargePoints[chargePointId]
+	if !ok {
+		logDefault(chargePointId, "processMeterValues").Warnf("ignoring metrics for unknown charge point")
+		return
+	}
+
+	m := Measurement{}
+	for _, sv := range mv.SampledValue {
+		v, err := strconv.ParseFloat(sv.Value, 64)
+		if err != nil {
+			logDefault(chargePointId, "processMeterValues").Warnf("invalid %s: %#v", sv.Measurand, sv)
+			continue
+		}
+		switch sv.Measurand {
+		case types.MeasurandVoltage:
+			m.Voltage = v
+		case types.MeasurandCurrentImport:
+			m.Current = v
+		case types.MeasurandPowerActiveImport:
+			m.ActivePower = v
+		case types.MeasurandEnergyActiveImportRegister:
+			m.MeterReading = int64(v)
+		}
+	}
+
+	connector := info.getConnector(connectorId)
+	connector.LastMeasurement = &m
+	connector.MeasurementTime = mv.Timestamp.Time
+
+	transaction, ok := info.Transactions[transactionId]
+	if ok {
+		transaction.LastMeasurement = &m
+		transaction.MeasurementTime = mv.Timestamp.Time
+	}
+}
+
 func (handler *CentralSystemHandler) OnMeterValues(chargePointId string, request *core.MeterValuesRequest) (confirmation *core.MeterValuesConfirmation, err error) {
-	logDefault(chargePointId, request.GetFeatureName()).Infof("received meter values for connector %v. Meter values:\n", request.ConnectorId)
+	logDefault(chargePointId, request.GetFeatureName()).Infof("received meter values for connector %v, transaction %v. Meter values:\n", request.ConnectorId, request.TransactionId)
 	for _, mv := range request.MeterValue {
+		handler.processMeterValues(chargePointId, request.ConnectorId, *request.TransactionId, mv)
 		logDefault(chargePointId, request.GetFeatureName()).Printf("%v", mv)
 	}
 	return core.NewMeterValuesConfirmation(), nil
