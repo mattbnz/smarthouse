@@ -14,6 +14,7 @@ require (
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
 	github.com/leodido/go-urn v1.1.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.20 // indirect
 	golang.org/x/sys v0.0.0-20220804214406-8e32c043e418 // indirect
 	gopkg.in/go-playground/validator.v9 v9.30.0 // indirect
 )

@@ -20,12 +20,15 @@ const (
 	defaultHeartbeatInterval = 600
 	envVarOCPPPort           = "SERVER_OCPP_PORT"
 	envVarHTTPPort           = "SERVER_HTTP_PORT"
+	envVarDBPath             = "DB_PATH"
 )
 
+var defaultDBPath = os.ExpandEnv("$HOME/.local/share/smarthouse/ocpp.db")
 var infoLog *logrus.Logger
 var debugLog *logrus.Logger
 var centralSystem ocpp16.CentralSystem
 var handler *CentralSystemHandler
+var store *Store
 
 func setupCentralSystem() ocpp16.CentralSystem {
 	return ocpp16.NewCentralSystem(nil, nil)
@@ -60,11 +63,24 @@ func main() {
 	} else {
 		infoLog.Printf("no valid %v environment variable found, using default port", envVarHTTPPort)
 	}
+	var dbPath = defaultDBPath
+	if p, found := os.LookupEnv(envVarDBPath); found {
+		dbPath = p
+	}
 
 	centralSystem = setupCentralSystem()
 
 	// Support callbacks for all OCPP 1.6 profiles
 	handler = &CentralSystemHandler{chargePoints: map[string]*ChargePointState{}}
+	var err error
+	var shutdown = make(chan bool)
+	store, err = NewStore(dbPath, handler, shutdown)
+	if err != nil {
+		infoLog.Fatalf("Could not initialise store: %v", err)
+	}
+	if err := store.Restore(); err != nil {
+		infoLog.Fatalf("Failed to restore state: %v", err)
+	}
 	centralSystem.SetCoreHandler(handler)
 	centralSystem.SetLocalAuthListHandler(handler)
 	centralSystem.SetFirmwareManagementHandler(handler)
@@ -73,7 +89,7 @@ func main() {
 	centralSystem.SetSmartChargingHandler(handler)
 	// Add handlers for dis/connection of charge points
 	centralSystem.SetNewChargePointHandler(func(chargePoint ocpp16.ChargePointConnection) {
-		handler.chargePoints[chargePoint.ID()] = &ChargePointState{connectors: map[int]*ConnectorInfo{}, transactions: map[int]*TransactionInfo{}}
+		handler.chargePoints[chargePoint.ID()] = &ChargePointState{Connectors: map[int]*ConnectorInfo{}, Transactions: map[int]*TransactionInfo{}}
 		infoLog.WithField("client", chargePoint.ID()).Infof("new charge point connected from %s", chargePoint.RemoteAddr())
 		go requestConfiguration(chargePoint.ID(), handler)
 	})
@@ -86,9 +102,14 @@ func main() {
 	// Run central system
 	infoLog.Infof("starting central system on port %v", ocppPort)
 	go centralSystem.Start(ocppPort, "/{ws}")
+	go store.Run()
 
 	infoLog.Infof("starting http server on port %v", httpPort)
 	http.ListenAndServe(fmt.Sprintf(":%d", httpPort), nil)
+	select {
+	case shutdown <- true:
+	default:
+	}
 }
 
 func init() {

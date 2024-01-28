@@ -24,31 +24,31 @@ func Index(w http.ResponseWriter, r *http.Request) {
 
 	for id, cp := range handler.chargePoints {
 		w.Write([]byte(fmt.Sprintf("<h1>%s</h1>", id)))
-		w.Write([]byte("<b>Vendor:</b> " + cp.bootData.ChargePointVendor + "<br>"))
-		w.Write([]byte("<b>Model:</b> " + cp.bootData.ChargePointModel + "<br>"))
-		w.Write([]byte("<b>Serial #:</b> " + cp.bootData.ChargePointSerialNumber + "<br>"))
-		w.Write([]byte("<b>Firmware Ver:</b> " + cp.bootData.FirmwareVersion + "<br>"))
+		w.Write([]byte("<b>Vendor:</b> " + cp.BootData.ChargePointVendor + "<br>"))
+		w.Write([]byte("<b>Model:</b> " + cp.BootData.ChargePointModel + "<br>"))
+		w.Write([]byte("<b>Serial #:</b> " + cp.BootData.ChargePointSerialNumber + "<br>"))
+		w.Write([]byte("<b>Firmware Ver:</b> " + cp.BootData.FirmwareVersion + "<br>"))
 
-		w.Write([]byte("<b>Status:</b> " + cp.status + "<br>"))
-		w.Write([]byte("<b>Diag Status:</b> " + cp.diagnosticsStatus + "<br>"))
-		w.Write([]byte("<b>Firmware Status:</b> " + cp.firmwareStatus + "<br>"))
+		w.Write([]byte("<b>Status:</b> " + cp.Status + "<br>"))
+		w.Write([]byte("<b>Diag Status:</b> " + cp.DiagnosticsStatus + "<br>"))
+		w.Write([]byte("<b>Firmware Status:</b> " + cp.FirmwareStatus + "<br>"))
 
 		w.Write([]byte("<h2>Configuration</h2><table>"))
 		w.Write([]byte("<tr><th>Key</th><th>Value</th></tr>"))
-		for _, k := range cp.configKeys {
+		for _, k := range cp.ConfigKeys {
 			w.Write([]byte(fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", k.Key, *k.Value)))
 		}
 		w.Write([]byte("</table>"))
 
 		w.Write([]byte("<h2>Connectors</h2><ul>"))
-		for cID, c := range cp.connectors {
-			w.Write([]byte(fmt.Sprintf("<li>%d - %s", cID, c.status)))
-			if c.status == core.ChargePointStatusPreparing {
+		for cID, c := range cp.Connectors {
+			w.Write([]byte(fmt.Sprintf("<li>%d - %s", cID, c.Status)))
+			if c.Status == core.ChargePointStatusPreparing {
 				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/start/%s/%d">`, id, cID)))
 				w.Write([]byte(`<input type="submit" value="Start">`))
 				w.Write([]byte(`</form>`))
-			} else if c.status != core.ChargePointStatusAvailable {
-				w.Write([]byte(fmt.Sprintf(" - Current Transaction: %d", c.currentTransaction)))
+			} else if c.Status != core.ChargePointStatusAvailable {
+				w.Write([]byte(fmt.Sprintf(" - Current Transaction: %d", c.CurrentTransaction)))
 			}
 			w.Write([]byte("</li>"))
 
@@ -57,11 +57,11 @@ func Index(w http.ResponseWriter, r *http.Request) {
 
 		w.Write([]byte("<h2>Transactions</h2><table>"))
 		w.Write([]byte("<tr><th>ID</th><th>Connector</th><th>Tag</th><th>Start</th><th>End</th><th>Start Meter</th><th>End Meter</th><th></th></tr>"))
-		for tID, t := range cp.transactions {
+		for tID, t := range cp.Transactions {
 			w.Write([]byte(fmt.Sprintf("<tr><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>%d</td>",
-				tID, t.connectorId, t.idTag, t.startTime, t.endTime, t.startMeter, t.endMeter)))
+				tID, t.ConnectorId, t.IDTag, t.StartTime, t.EndTime, t.StartMeter, t.EndMeter)))
 			w.Write([]byte("<td>"))
-			if t.endTime == nil || t.endTime.IsZero() {
+			if t.EndTime == nil || t.EndTime.IsZero() {
 				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/stop/%s/%d">`, id, tID)))
 				w.Write([]byte(`<input type="submit" value="Stop">`))
 				w.Write([]byte(`</form>`))
@@ -146,7 +146,7 @@ func StartTransaction(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`Invalid transaction ID`))
 		return
 	}
-	connector, ok := info.connectors[connectorID]
+	connector, ok := info.Connectors[connectorID]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`Unknown connector`))
@@ -206,14 +206,14 @@ func StopTransaction(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`Invalid transaction ID`))
 		return
 	}
-	trans, ok := info.transactions[tID]
+	trans, ok := info.Transactions[tID]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`Unknown transaction`))
 		return
 	}
 
-	if trans.endTime != nil && !trans.endTime.IsZero() {
+	if trans.EndTime != nil && !trans.EndTime.IsZero() {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`Transaction already ended`))
 		return

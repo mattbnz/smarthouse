@@ -17,46 +17,46 @@ var (
 
 // TransactionInfo contains info about a transaction
 type TransactionInfo struct {
-	id          int
-	startTime   *types.DateTime
-	endTime     *types.DateTime
-	startMeter  int
-	endMeter    int
-	connectorId int
-	idTag       string
+	ID          int
+	StartTime   *types.DateTime
+	EndTime     *types.DateTime
+	StartMeter  int
+	EndMeter    int
+	ConnectorId int
+	IDTag       string
 }
 
 func (ti *TransactionInfo) hasTransactionEnded() bool {
-	return ti.endTime != nil && !ti.endTime.IsZero()
+	return ti.EndTime != nil && !ti.EndTime.IsZero()
 }
 
 // ConnectorInfo contains status and ongoing transaction ID for a connector
 type ConnectorInfo struct {
-	status             core.ChargePointStatus
-	currentTransaction int
+	Status             core.ChargePointStatus
+	CurrentTransaction int
 }
 
 func (ci *ConnectorInfo) hasTransactionInProgress() bool {
-	return ci.currentTransaction >= 0
+	return ci.CurrentTransaction >= 0
 }
 
 // ChargePointState contains some simple state for a connected charge point
 type ChargePointState struct {
-	bootData          core.BootNotificationRequest
-	status            core.ChargePointStatus
-	diagnosticsStatus firmware.DiagnosticsStatus
-	firmwareStatus    firmware.FirmwareStatus
-	connectors        map[int]*ConnectorInfo // No assumptions about the # of connectors
-	transactions      map[int]*TransactionInfo
-	errorCode         core.ChargePointErrorCode
-	configKeys        []core.ConfigurationKey
+	BootData          core.BootNotificationRequest
+	Status            core.ChargePointStatus
+	DiagnosticsStatus firmware.DiagnosticsStatus
+	FirmwareStatus    firmware.FirmwareStatus
+	Connectors        map[int]*ConnectorInfo // No assumptions about the # of connectors
+	Transactions      map[int]*TransactionInfo
+	ErrorCode         core.ChargePointErrorCode
+	ConfigKeys        []core.ConfigurationKey
 }
 
 func (cps *ChargePointState) getConnector(id int) *ConnectorInfo {
-	ci, ok := cps.connectors[id]
+	ci, ok := cps.Connectors[id]
 	if !ok {
-		ci = &ConnectorInfo{currentTransaction: -1}
-		cps.connectors[id] = ci
+		ci = &ConnectorInfo{CurrentTransaction: -1}
+		cps.Connectors[id] = ci
 	}
 	return ci
 }
@@ -82,7 +82,7 @@ func (handler *CentralSystemHandler) OnBootNotification(chargePointId string, re
 	if !ok {
 		logDefault(chargePointId, request.GetFeatureName()).Warnf("Boot notification from unknown charge point")
 	} else {
-		info.bootData = *request
+		info.BootData = *request
 	}
 	return core.NewBootNotificationConfirmation(types.NewDateTime(time.Now()), defaultHeartbeatInterval, core.RegistrationStatusAccepted), nil
 }
@@ -110,13 +110,13 @@ func (handler *CentralSystemHandler) OnStatusNotification(chargePointId string, 
 	if !ok {
 		return nil, fmt.Errorf("unknown charge point %v", chargePointId)
 	}
-	info.errorCode = request.ErrorCode
+	info.ErrorCode = request.ErrorCode
 	if request.ConnectorId > 0 {
 		connectorInfo := info.getConnector(request.ConnectorId)
-		connectorInfo.status = request.Status
+		connectorInfo.Status = request.Status
 		logDefault(chargePointId, request.GetFeatureName()).Infof("connector %v updated status to %v", request.ConnectorId, request.Status)
 	} else {
-		info.status = request.Status
+		info.Status = request.Status
 		logDefault(chargePointId, request.GetFeatureName()).Infof("all connectors updated status to %v", request.Status)
 	}
 	return core.NewStatusNotificationConfirmation(), nil
@@ -128,21 +128,21 @@ func (handler *CentralSystemHandler) OnStartTransaction(chargePointId string, re
 		return nil, fmt.Errorf("unknown charge point %v", chargePointId)
 	}
 	connector := info.getConnector(request.ConnectorId)
-	if connector.currentTransaction >= 0 {
+	if connector.CurrentTransaction >= 0 {
 		return nil, fmt.Errorf("connector %v is currently busy with another transaction", request.ConnectorId)
 	}
 	transaction := &TransactionInfo{}
-	transaction.idTag = request.IdTag
-	transaction.connectorId = request.ConnectorId
-	transaction.startMeter = request.MeterStart
-	transaction.startTime = request.Timestamp
-	transaction.id = nextTransactionId
+	transaction.IDTag = request.IdTag
+	transaction.ConnectorId = request.ConnectorId
+	transaction.StartMeter = request.MeterStart
+	transaction.StartTime = request.Timestamp
+	transaction.ID = nextTransactionId
 	nextTransactionId += 1
-	connector.currentTransaction = transaction.id
-	info.transactions[transaction.id] = transaction
+	connector.CurrentTransaction = transaction.ID
+	info.Transactions[transaction.ID] = transaction
 	//TODO: check billable clients
-	logDefault(chargePointId, request.GetFeatureName()).Infof("started transaction %v for connector %v", transaction.id, transaction.connectorId)
-	return core.NewStartTransactionConfirmation(types.NewIdTagInfo(types.AuthorizationStatusAccepted), transaction.id), nil
+	logDefault(chargePointId, request.GetFeatureName()).Infof("started transaction %v for connector %v", transaction.ID, transaction.ConnectorId)
+	return core.NewStartTransactionConfirmation(types.NewIdTagInfo(types.AuthorizationStatusAccepted), transaction.ID), nil
 }
 
 func (handler *CentralSystemHandler) OnStopTransaction(chargePointId string, request *core.StopTransactionRequest) (confirmation *core.StopTransactionConfirmation, err error) {
@@ -150,12 +150,12 @@ func (handler *CentralSystemHandler) OnStopTransaction(chargePointId string, req
 	if !ok {
 		return nil, fmt.Errorf("unknown charge point %v", chargePointId)
 	}
-	transaction, ok := info.transactions[request.TransactionId]
+	transaction, ok := info.Transactions[request.TransactionId]
 	if ok {
-		connector := info.getConnector(transaction.connectorId)
-		connector.currentTransaction = -1
-		transaction.endTime = request.Timestamp
-		transaction.endMeter = request.MeterStop
+		connector := info.getConnector(transaction.ConnectorId)
+		connector.CurrentTransaction = -1
+		transaction.EndTime = request.Timestamp
+		transaction.EndMeter = request.MeterStop
 		//TODO: bill charging period to client
 	}
 	logDefault(chargePointId, request.GetFeatureName()).Infof("stopped transaction %v - %v", request.TransactionId, request.Reason)
@@ -172,7 +172,7 @@ func (handler *CentralSystemHandler) OnDiagnosticsStatusNotification(chargePoint
 	if !ok {
 		return nil, fmt.Errorf("unknown charge point %v", chargePointId)
 	}
-	info.diagnosticsStatus = request.Status
+	info.DiagnosticsStatus = request.Status
 	logDefault(chargePointId, request.GetFeatureName()).Infof("updated diagnostics status to %v", request.Status)
 	return firmware.NewDiagnosticsStatusNotificationConfirmation(), nil
 }
@@ -182,7 +182,7 @@ func (handler *CentralSystemHandler) OnFirmwareStatusNotification(chargePointId 
 	if !ok {
 		return nil, fmt.Errorf("unknown charge point %v", chargePointId)
 	}
-	info.firmwareStatus = request.Status
+	info.FirmwareStatus = request.Status
 	logDefault(chargePointId, request.GetFeatureName()).Infof("updated firmware status to %v", request.Status)
 	return &firmware.FirmwareStatusNotificationConfirmation{}, nil
 }
@@ -197,7 +197,7 @@ func (handler *CentralSystemHandler) OnConfig(chargePointId string, conf *core.G
 		logDefault(chargePointId, "GetConfiguration").Error("unknown charge point")
 		return
 	}
-	info.configKeys = conf.ConfigurationKey
+	info.ConfigKeys = conf.ConfigurationKey
 	for _, k := range conf.UnknownKey {
 		logDefault(chargePointId, "Configuration").Warnf("Unknown configuration key: %s", k)
 	}
