@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"slices"
 	"strconv"
 	"time"
 
@@ -19,9 +20,19 @@ func init() {
 	http.HandleFunc("/start/", StartTransaction)
 }
 
+func orderedTransactions(t map[int]*TransactionInfo) (rv []*TransactionInfo) {
+	for _, tt := range t {
+		rv = append(rv, tt)
+	}
+	slices.SortFunc(rv, func(a *TransactionInfo, b *TransactionInfo) int { return a.StartTime.Time.Compare(b.StartTime.Time) })
+	return
+}
+
 func Index(w http.ResponseWriter, r *http.Request) {
 
-	w.Write([]byte(`<html><head><meta http-equiv="refresh" content="2; url=/"><title>MG Controller</title></head><body>`))
+	w.Write([]byte(`<html><head>`))
+	w.Write([]byte(fmt.Sprintf(`<meta http-equiv="refresh" content="2; url=/?%s">`, r.URL.Query().Encode())))
+	w.Write([]byte(`<title>MG Controller</title></head><body>`))
 
 	for id, cp := range handler.chargePoints {
 		w.Write([]byte(fmt.Sprintf("<h1>%s</h1>", id)))
@@ -38,12 +49,17 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<input type="submit" value="Reset">`))
 		w.Write([]byte(`</form>`))
 
-		w.Write([]byte("<h2>Configuration</h2><table>"))
-		w.Write([]byte("<tr><th>Key</th><th>Value</th></tr>"))
-		for _, k := range cp.ConfigKeys {
-			w.Write([]byte(fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", k.Key, *k.Value)))
+		w.Write([]byte("<h2>Configuration</h2>"))
+		if r.URL.Query().Has("showconfig") {
+			w.Write([]byte("<a href='/'>Hide Config</a>"))
+			w.Write([]byte("<table><tr><th>Key</th><th>Value</th></tr>"))
+			for _, k := range cp.ConfigKeys {
+				w.Write([]byte(fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", k.Key, *k.Value)))
+			}
+			w.Write([]byte("</table>"))
+		} else {
+			w.Write([]byte("<a href='/?showconfig=1'>Show Config</a>"))
 		}
-		w.Write([]byte("</table>"))
 
 		w.Write([]byte("<h2>Connectors</h2><ul>"))
 		for cID, c := range cp.Connectors {
@@ -66,9 +82,9 @@ func Index(w http.ResponseWriter, r *http.Request) {
 
 		w.Write([]byte("<h2>Transactions</h2><table>"))
 		w.Write([]byte("<tr><th>ID</th><th>Connector</th><th>Tag</th><th>Start</th><th>End</th><th>Start Meter</th><th>End Meter</th><th></th></tr>"))
-		for tID, t := range cp.Transactions {
+		for _, t := range orderedTransactions(cp.Transactions) {
 			w.Write([]byte(fmt.Sprintf("<tr><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>",
-				tID, t.ConnectorId, t.IDTag, t.StartTime, t.EndTime, t.StartMeter)))
+				t.ID, t.ConnectorId, t.IDTag, t.StartTime, t.EndTime, t.StartMeter)))
 			if time.Since(t.MeasurementTime) < 30*time.Second {
 				w.Write([]byte(fmt.Sprintf("providing %.1fW @ %.1fV / %.1fA", t.LastMeasurement.ActivePower, t.LastMeasurement.Voltage, t.LastMeasurement.Current)))
 				w.Write([]byte(fmt.Sprintf(" (total %d W since start)", t.LastMeasurement.MeterReading-int64(t.StartMeter))))
@@ -79,7 +95,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Write([]byte("</td><td>"))
 			if t.EndTime == nil || t.EndTime.IsZero() {
-				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/stop/%s/%d">`, id, tID)))
+				w.Write([]byte(fmt.Sprintf(`<form method="post" action="/stop/%s/%d">`, id, t.ID)))
 				w.Write([]byte(`<input type="submit" value="Stop">`))
 				w.Write([]byte(`</form>`))
 			}
