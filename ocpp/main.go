@@ -101,7 +101,8 @@ func main() {
 		infoLog.WithField("client", chargePoint.ID()).Info("charge point disconnected")
 		delete(handler.chargePoints, chargePoint.ID())
 	})
-	ocppj.SetLogger(debugLog.WithField("logger", "ocppj"))
+	//ocppj.SetLogger(debugLog.WithField("logger", "ocppj"))
+	ocppj.SetLogger(infoLog.WithField("logger", "ocppj"))
 	ws.SetLogger(infoLog.WithField("logger", "websocket"))
 	// Run central system
 	infoLog.Infof("starting central system on port %v", ocppPort)
