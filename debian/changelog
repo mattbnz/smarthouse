@@ -1,9 +1,9 @@
-smarthouse (0.0~git.202402251642.xxxxxxx) UNRELEASED; urgency=medium
+smarthouse (0.0~git.202402251642.347b38d) internal; urgency=medium
 
   * Update from git.
   * Add smarthouse-ocpp utility.
 
- -- Matt Brown <mattb@debian.org>  Sun, 25 Feb 2024 16:41:45 +1300
+ -- Matt Brown <mattb@debian.org>  Mon, 26 Feb 2024 00:57:26 +1300
 
 smarthouse (0.0~git.202201042354.0229919) internal; urgency=medium
 
