@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
-	"slices"
+	"sort"
 	"strconv"
 	"time"
 
@@ -24,7 +24,7 @@ func orderedTransactions(t map[int]*TransactionInfo) (rv []*TransactionInfo) {
 	for _, tt := range t {
 		rv = append(rv, tt)
 	}
-	slices.SortFunc(rv, func(a *TransactionInfo, b *TransactionInfo) int { return a.StartTime.Time.Compare(b.StartTime.Time) })
+	sort.Slice(rv, func(i, j int) bool { return rv[i].StartTime.Time.Sub(rv[j].StartTime.Time) < 0 })
 	return
 }
 
