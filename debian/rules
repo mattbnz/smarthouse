@@ -29,6 +29,10 @@ override_dh_auto_install:
 	cp common/smarthouse debian/smarthouse/usr/bin
 	cp ocpp/smarthouse-ocpp debian/smarthouse/usr/bin
 
+override_dh_installsystemd:
+	dh_installsystemd --name=smarthouse
+	dh_installsystemd --name=smarthouse-ocpp
+
 override_dh_dwz:
 
 # dh_make generated override targets
