@@ -1,0 +1,14 @@
+[Unit]
+Description=Smarthouse OCPP
+Wants=network.target
+After=network.target
+
+[Service]
+EnvironmentFile=-/etc/default/smarthouse-ocpp
+Type=simple
+ExecStart=/usr/bin/smarthouse-ocpp
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

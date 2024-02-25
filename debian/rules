@@ -16,18 +16,22 @@ export DH_VERBOSE = 1
 %:
 	dh $@
 
+build:
+	cd common && go build smarthouse.go
+	cd ocpp && go build -o smarthouse-ocpp handler.go http.go store.go main.go
+
 override_dh_auto_clean:
 	cd common && go clean
-
-override_dh_auto_build:
-	cd common && go build smarthouse.go
+	cd ocpp && go clean
 
 override_dh_auto_install:
 	mkdir -p debian/smarthouse/usr/bin
 	cp common/smarthouse debian/smarthouse/usr/bin
+	cp ocpp/smarthouse-ocpp debian/smarthouse/usr/bin
+
+override_dh_dwz:
 
 # dh_make generated override targets
 # This is example for Cmake (See https://bugs.debian.org/641051 )
 #override_dh_auto_configure:
 #	dh_auto_configure -- #	-DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH)
-
