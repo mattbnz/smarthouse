@@ -59,7 +59,7 @@ func main() {
 	var httpPort = defaultHTTPPort
 	port, _ = os.LookupEnv(envVarHTTPPort)
 	if p, err := strconv.Atoi(port); err == nil {
-		ocppPort = p
+		httpPort = p
 	} else {
 		infoLog.Printf("no valid %v environment variable found, using default port", envVarHTTPPort)
 	}
