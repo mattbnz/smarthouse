@@ -12,7 +12,7 @@
 #include <ESP8266WiFi.h>
 #include <LittleFS.h>
 #include <PubSubClient.h>
-#include <Timer.h>
+#include <arduino-timer.h>
 
 #include "util.h"
 #include "Sensor.h"
@@ -36,7 +36,8 @@ WiFiServer http(80);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-Timer t;
+auto t = timer_create_default();
+
 
 // ** Operation Control variables **
 // These are stored into flash and read at startup; new values may be
@@ -78,7 +79,7 @@ String otaStatus;
 unsigned int reportsSent = 0;
 // Handle for the report timer,
 // doubles as overall status for are we reporting?
-int8_t timer_handle = -1;
+Timer<>::Task timer_handle = nullptr;
 // Is it time to go to sleep?
 bool timeToSleep = false;
 // mqtt topic name caches, built on config read
@@ -172,7 +173,7 @@ void loadConfig() {
 }
 
 void loop() {
-  t.update();
+  t.tick();
   mqttClient.loop();
 
   if (lowPower) {
@@ -228,7 +229,7 @@ String statusPage() {
 }
 
 // called by the timer when it's time to make a report.
-void doReport() {
+bool doReport(void *arg) {
     for (auto s = sensors.begin(); s != sensors.end(); ++s) {
       (*s)->Collect();
     }
@@ -257,6 +258,8 @@ void doReport() {
     if (lowPower && reportsSent >= reportCount) {
       timeToSleep = true;
     }
+
+    return true;  // keep the timer going.
 }
 
 // Publish a hello and subscribe to config topic if we haven't already.
@@ -372,7 +375,7 @@ void handleConfigMsg(char* topic, byte* payload, unsigned int length) {
     if (writeConfig("reportInterval", value)) {
       reportInterval = ivalue;
       // reset reporting timer to new value.
-      t.stop(timer_handle);
+      t.cancel(timer_handle);
       timer_handle = t.every(reportInterval, doReport);
     }
   } else if (stopic.compareTo(mqttConfigTopicName("reportCount")) == 0) {
@@ -446,7 +449,7 @@ void connectMQTT() {
   if (mqttClient.connected()) {
     return;
   }
-	
+
   mqttClient.setServer(mqttHost.c_str(), mqttPort);
   mqttClient.setCallback(handleConfigMsg);
   mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
@@ -468,8 +471,8 @@ void goToSleep() {
   for (auto s = sensors.begin(); s != sensors.end(); ++s) {
     (*s)->Shutdown();
   }
-  t.stop(timer_handle);
-  timer_handle = -1;
+  t.cancel(timer_handle);
+  timer_handle = nullptr;
   timeToSleep = false;
   mqttClient.disconnect();
   WiFi.mode(WIFI_OFF);
