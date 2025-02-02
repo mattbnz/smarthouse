@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -88,7 +89,7 @@ func NewFlowSensor(node *Node, flow string) *flowSensor {
 		total_mL:     0,
 		lastReceived: time.Unix(0, 0),
 	}
-	labels := prometheus.Labels{"node": node.Name, "flow": flow}
+	labels := prometheus.Labels{"node": s.nameForNode(node.Name), "flow": flow}
 	s.p_mL_per_min = prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
 			Name:        "mL_per_min",
@@ -173,6 +174,14 @@ func (c *flowSensor) Subscribe(mqttClient mqtt.Client) {
 		return
 	}
 	log.Printf("%s Flow %s: Subscribed to %s", c.node.Name, c.flow, c.topic)
+}
+
+// Converts names of the form pumpmon-foo or pumpmon-bar to pumpmon (e.g. strips -trailing)
+func (c *flowSensor) nameForNode(node string) string {
+	if strings.Contains(node, "-") {
+		return node[0:strings.Index(node, "-")]
+	}
+	return node
 }
 
 func (c *flowSensor) Unsubscribe(mqttClient mqtt.Client) {
@@ -335,7 +344,17 @@ func createClientOptions(clientId string, uri *url.URL) *mqtt.ClientOptions {
 
 func reportNodes(w http.ResponseWriter, _ *http.Request) {
 	io.WriteString(w, "<html><body><H1>Nodes</H1>")
-	for _, node := range nodes {
+
+	// Collect node names and sort them
+	nodeNames := make([]string, 0, len(nodes))
+	for name := range nodes {
+		nodeNames = append(nodeNames, name)
+	}
+	sort.Strings(nodeNames)
+
+	// Print nodes in sorted order
+	for _, nodeName := range nodeNames {
+		node := nodes[nodeName]
 		hello := node.Config
 		io.WriteString(w, "<h2>"+hello.Node+"</h2>")
 		io.WriteString(w, "<b>Last Contact:</b>&nbsp;&nbsp;<span title=\""+
