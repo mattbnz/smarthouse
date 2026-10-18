@@ -1,0 +1,145 @@
+groups:
+  - name: water_alerts
+    rules:
+    # Flow alerts use the average rate over the window (from the total_mL
+    # counter) rather than instantaneous mL_per_min + "for:", so a brief dip
+    # or a missed scrape doesn't reset them. Values are in L/min.
+    - alert: HighFlowRate
+      expr: rate(total_mL{job="water"}[5m]) * 60 / 1000 > 30
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: water flowing at {{ printf "%.0f" $value }}L/min (>30L/min) for 5 minutes!'
+    - alert: LongFlowRateHouse
+      expr: rate(total_mL{job="water",flow="house"}[20m]) * 60 / 1000 > 10
+      labels:
+        severity: email
+      annotations:
+        summary: 'house: water flowing at {{ printf "%.1f" $value }}L/min (>10L/min) for 20 minutes!'
+    - alert: LongFlowRateFarm
+      expr: rate(total_mL{job="water",flow="farm"}[30m]) * 60 / 1000 > 15
+      labels:
+        severity: email
+      annotations:
+        summary: 'farm: water flowing at {{ printf "%.1f" $value }}L/min (>15L/min) for 30 minutes!'
+    - alert: ExtendedFlowRate
+      expr: rate(total_mL{job="water"}[60m]) * 60 / 1000 > 5
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: water flowing at {{ printf "%.1f" $value }}L/min (>5L/min) for 60 minutes!'
+    # Leak signature: flow never drops to zero.
+    - alert: ContinuousFlow
+      expr: min_over_time(mL_per_min{job="water"}[3h]) > 0
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: water has not stopped flowing for 3 hours (min {{ printf "%.0f" $value }}mL/min) - possible leak!'
+    - alert: HighHourlyWaterVolumeHouseWarning
+      expr: increase(total_mL{job="water",flow="house"}[1h]) / 1000 > 400
+      labels:
+        severity: email
+      annotations:
+        summary: 'House water usage high: {{ printf "%.0f" $value }}L in last hour (>400L)'
+    - alert: HighHourlyWaterVolumeHouseCritical
+      expr: increase(total_mL{job="water",flow="house"}[1h]) / 1000 > 500
+      labels:
+        severity: email
+      annotations:
+        summary: 'House water usage critical: {{ printf "%.0f" $value }}L in last hour (>500L)'
+
+  # Pump power alerts. label_replace adds flow="house"/"farm" (from the
+  # pump-<flow>_* sensor id) so alerts group with the matching flow alerts.
+  - name: pump_alerts
+    rules:
+    - alert: ElevatedPowerUsageHouse
+      expr: label_replace(esphome_sensor_value{id="pump-house_daily_energy"}, "flow", "house", "", "") > 1.0
+      for: 1m
+      labels:
+        severity: email
+      annotations:
+        summary: 'house: daily pump energy {{ printf "%.2f" $value }}kWh (>1kWh)!'
+    - alert: ElevatedPowerUsageFarm
+      expr: label_replace(esphome_sensor_value{id="pump-farm_daily_energy"}, "flow", "farm", "", "") > 0.5
+      for: 1m
+      labels:
+        severity: email
+      annotations:
+        summary: 'farm: daily pump energy {{ printf "%.2f" $value }}kWh (>0.5kWh)!'
+    - alert: AbnormalPowerUsageHouse
+      expr: label_replace(esphome_sensor_value{id="pump-house_daily_energy"}, "flow", "house", "", "") > 1.5
+      for: 1m
+      labels:
+        severity: email
+      annotations:
+        summary: 'house: daily pump energy {{ printf "%.2f" $value }}kWh (>1.5kWh)!'
+    - alert: AbnormalPowerUsageFarm
+      expr: label_replace(esphome_sensor_value{id="pump-farm_daily_energy"}, "flow", "farm", "", "") > 1.0
+      for: 1m
+      labels:
+        severity: email
+      annotations:
+        summary: 'farm: daily pump energy {{ printf "%.2f" $value }}kWh (>1.0kWh)!'
+    - alert: LongPumping
+      expr: label_replace(esphome_sensor_value{id=~"pump-.*_power"}, "flow", "$1", "id", "pump-(.*)_power") > 200
+      for: 10m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: pump appears to have been running for more than 10 minutes!'
+    - alert: ExtendedPumping
+      expr: label_replace(esphome_sensor_value{id=~"pump-.*_power"}, "flow", "$1", "id", "pump-(.*)_power") > 200
+      for: 30m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: pump appears to have been running for more than 30 minutes!'
+    - alert: ContinuousPumping
+      expr: label_replace(esphome_sensor_value{id=~"pump-.*_power"}, "flow", "$1", "id", "pump-(.*)_power") > 200
+      for: 60m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: pump appears to have been running for more than 60 minutes!'
+    # Pump running but the flow meter sees (almost) nothing: dead flow
+    # sensor/wiring, pump lost prime/running dry, or a break upstream of the
+    # meter. 1L/min is the FS400A's minimum rated flow. max by (flow) copes
+    # with more than one series per flow (e.g. old receiver + ESPHome node).
+    - alert: PumpRunningNoFlow
+      expr: |
+        (label_replace(esphome_sensor_value{id=~"pump-.*_power"}, "flow", "$1", "id", "pump-(.*)_power") > 200)
+        unless on(flow)
+        (max by (flow) (mL_per_min{job="water"}) >= 1000)
+      for: 5m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: pump running ({{ printf "%.0f" $value }}W) for 5 minutes but no water flow measured - check flow sensor, pump prime, pipes!'
+
+  # Missing series: the alerts above can't fire without data. (Target-down
+  # is covered by up{} alerts elsewhere; these catch relabel/config/sensor id
+  # changes too.)
+  - name: water_series_missing
+    rules:
+    - alert: FlowSeriesMissing
+      expr: |
+        absent(mL_per_min{job="water",flow="house"}) or absent(total_mL{job="water",flow="house"})
+        or absent(mL_per_min{job="water",flow="farm"}) or absent(total_mL{job="water",flow="farm"})
+      for: 15m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: no water flow data for 15 minutes - flow alerts cannot fire!'
+    - alert: PumpSeriesMissing
+      expr: |
+        label_replace(
+          absent(esphome_sensor_value{id="pump-house_power"})
+          or absent(esphome_sensor_value{id="pump-house_daily_energy"})
+          or absent(esphome_sensor_value{id="pump-farm_power"})
+          or absent(esphome_sensor_value{id="pump-farm_daily_energy"}),
+          "flow", "$1", "id", "pump-([^_]+)_.*")
+      for: 15m
+      labels:
+        severity: email
+      annotations:
+        summary: '{{ $labels.flow }}: no {{ $labels.id }} data for 15 minutes - pump alerts cannot fire!'

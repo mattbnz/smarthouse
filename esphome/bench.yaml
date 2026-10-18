@@ -1,0 +1,31 @@
+# Bench/test config for evaluating spare boards: DHCP, reachable as
+# bench.local. Check WiFi signal, reset reason and heap on the web page.
+substitutions:
+  name: bench
+  friendly_name: Bench
+  flow_pin: D5
+  ml_per_pulse: "3.4722"  # FS400A
+
+packages:
+  base: !include common/base.yaml
+  flow: !include common/flow-sensor.yaml
+
+# Verbose WiFi logging for debugging connection problems over serial:
+#   esphome logs bench.yaml --device /dev/ttyUSB0
+logger:
+  level: VERBOSE
+  logs:
+    wifi: VERBOSE
+    wifi_esp8266: VERBOSE
+    pulse_counter: INFO
+    sensor: INFO
+    uptime.sensor: INFO
+    wifi_signal.sensor: INFO
+    debug: INFO
+
+wifi:
+  manual_ip:
+    static_ip: 10.230.2.50
+    gateway: !secret gateway
+    subnet: !secret subnet
+    dns1: !secret dns

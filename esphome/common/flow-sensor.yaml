@@ -1,0 +1,39 @@
+# Hall-effect pulse flow sensor.
+#
+# Expects substitutions:
+#   flow_pin      - must NOT be a strapping pin (D3, D4, D8) or D0/A0.
+#                   D5, D6, D7 are safe.
+#   ml_per_pulse  - calibration. FS400A: F(Hz) = 4.8 * Q(L/min)
+#                   => 288 pulses/L => 1000/288 = 3.4722 mL/pulse.
+#
+# Exposed in Prometheus as esphome_sensor_value{id="flow_rate"} (mL/min)
+# and esphome_sensor_value{id="flow_total"} (mL since boot).
+
+sensor:
+  - platform: pulse_counter
+    id: flow_rate
+    name: Flow rate
+    pin:
+      number: ${flow_pin}
+      mode:
+        input: true
+        pullup: true
+    count_mode:
+      rising_edge: INCREMENT
+      falling_edge: DISABLE
+    # Ignore glitches shorter than this; FS400A at 60 L/min is ~288Hz
+    # (~1.7ms half-period), so 100us rejects noise with plenty of margin.
+    internal_filter: 100us
+    update_interval: 10s
+    # pulse_counter reports pulses/min; scale to mL/min.
+    unit_of_measurement: mL/min
+    accuracy_decimals: 0
+    filters:
+      - multiply: ${ml_per_pulse}
+    total:
+      id: flow_total
+      name: Flow total
+      unit_of_measurement: mL
+      accuracy_decimals: 0
+      filters:
+        - multiply: ${ml_per_pulse}

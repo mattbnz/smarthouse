@@ -1,0 +1,34 @@
+# Changes to merge into alertmanager.yml for water.rules.yml.
+#
+# Every water/pump alert carries a flow="house"/"farm" label, so grouping by
+# flow turns one incident (e.g. a burst pipe: flow + volume + pumping alerts)
+# into one notification per site rather than one per alert.
+#
+# 1. Add this as the FIRST entry under route.routes (before the catch-all
+#    matt_discord route). No "continue", so water alerts are only handled
+#    here; like everything else (bar FailedBackup) they go to Discord only.
+#    To also email them, add a second copy with receiver: matt above it, with
+#    continue: true.
+route:
+  routes:
+    - receiver: matt_discord
+      matchers: ['flow=~"house|farm"']
+      group_by: ['flow']
+      # Collect related alerts from the same incident into one message.
+      group_wait: 1m
+
+# 2. Add (or append to) the top-level inhibit_rules: suppress lower tiers
+#    while a higher tier for the same flow is firing.
+inhibit_rules:
+  - source_matchers: [alertname="ContinuousPumping"]
+    target_matchers: [alertname=~"ExtendedPumping|LongPumping"]
+    equal: [flow]
+  - source_matchers: [alertname="ExtendedPumping"]
+    target_matchers: [alertname="LongPumping"]
+    equal: [flow]
+  - source_matchers: [alertname=~"AbnormalPowerUsage(House|Farm)"]
+    target_matchers: [alertname=~"ElevatedPowerUsage(House|Farm)"]
+    equal: [flow]
+  - source_matchers: [alertname="HighHourlyWaterVolumeHouseCritical"]
+    target_matchers: [alertname="HighHourlyWaterVolumeHouseWarning"]
+    equal: [flow]

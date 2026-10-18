@@ -1,0 +1,1971 @@
+{
+  "title": "Water",
+  "uid": "water",
+  "tags": [
+    "water"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "schemaVersion": 40,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "bMQFsMInk"
+        },
+        "enable": true,
+        "name": "Water alerts",
+        "iconColor": "red",
+        "expr": "ALERTS{alertstate=\"firing\",flow=~\"house|farm\"}",
+        "step": "1m",
+        "titleFormat": "{{alertname}}",
+        "textFormat": "{{flow}}",
+        "tagKeys": "flow",
+        "useValueForTime": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Now",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Flow now",
+      "description": "Current flow rate per site (10s resolution).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum by (flow) (mL_per_min{job=\"water\"}) / 1000",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "flowlpm",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "textMode": "value_and_name",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Today",
+      "description": "Water used since local midnight.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum by (flow) (increase(total_mL{job=\"water\"}[$__range])) / 1000",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\"}[$__range])) / 1000",
+          "legendFormat": "Total",
+          "refId": "B",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": null,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "textMode": "value_and_name",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "timeFrom": "now/d"
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Last 7 days",
+      "description": "Water used in the last 7 days (rolling).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum by (flow) (increase(total_mL{job=\"water\"}[7d])) / 1000",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\"}[7d])) / 1000",
+          "legendFormat": "Total",
+          "refId": "B",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": null,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "textMode": "value_and_name",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "vs previous 7 days",
+      "description": "Change in the last 7 days' usage compared with the 7 days before.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "(sum by (flow) (increase(total_mL{job=\"water\"}[7d])) / sum by (flow) (increase(total_mL{job=\"water\"}[7d] offset 7d)) - 1) * 100",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "(sum(increase(total_mL{job=\"water\"}[7d])) / sum(increase(total_mL{job=\"water\"}[7d] offset 7d)) - 1) * 100",
+          "legendFormat": "Total",
+          "refId": "B",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "textMode": "value_and_name",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 6,
+      "title": "House",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "House: flow rate",
+      "description": "Average flow rate (L/min). Dashed lines are the alert levels: 5 L/min for 60m, 10 L/min for 20m, 30 L/min for 5m.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "rate(total_mL{job=\"water\",flow=\"house\"}[$__rate_interval]) * 60 / 1000",
+          "legendFormat": "House",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "flowlpm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 5
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 10
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 30
+              }
+            ]
+          },
+          "min": 0,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "House: pump power",
+      "description": "Pump power draw. Dashed line: 200 W 'pump running' alert level. Pump running with no flow above = check flow sensor, prime, pipes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "esphome_sensor_value{id=\"pump-house_power\"}",
+          "legendFormat": "House pump",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 200
+              }
+            ]
+          },
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 9,
+      "title": "Farm",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 10,
+      "title": "Farm: flow rate",
+      "description": "Average flow rate (L/min). Dashed lines are the alert levels: 5 L/min for 60m, 15 L/min for 30m, 30 L/min for 5m.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "rate(total_mL{job=\"water\",flow=\"farm\"}[$__rate_interval]) * 60 / 1000",
+          "legendFormat": "Farm",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "flowlpm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#d95926"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 5
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 15
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 30
+              }
+            ]
+          },
+          "min": 0,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "Farm: pump power",
+      "description": "Pump power draw. Dashed line: 200 W 'pump running' alert level. Pump running with no flow above = check flow sensor, prime, pipes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "esphome_sensor_value{id=\"pump-farm_power\"}",
+          "legendFormat": "Farm pump",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#d95926"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#8e8e8e",
+                "value": 200
+              }
+            ]
+          },
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 12,
+      "title": "History",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 13,
+      "title": "Daily usage, last 14 days",
+      "description": "Litres per day, house and farm stacked. Prometheus days are UTC, so each bar is the 24h ending at 1pm NZDT (noon NZST).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum by (flow) (increase(total_mL{job=\"water\"}[1d])) / 1000",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1d"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "fillOpacity": 90,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": -1,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum",
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      },
+      "timeFrom": "14d",
+      "interval": "1d"
+    },
+    {
+      "type": "status-history",
+      "id": 14,
+      "title": "House: litres per hour, last 14 days",
+      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; brighter = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h])) / 1000",
+          "legendFormat": "Today",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 1d)) / 1000",
+          "legendFormat": "1d ago",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 2d)) / 1000",
+          "legendFormat": "2d ago",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 3d)) / 1000",
+          "legendFormat": "3d ago",
+          "refId": "D",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 4d)) / 1000",
+          "legendFormat": "4d ago",
+          "refId": "E",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 5d)) / 1000",
+          "legendFormat": "5d ago",
+          "refId": "F",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 6d)) / 1000",
+          "legendFormat": "6d ago",
+          "refId": "G",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 7d)) / 1000",
+          "legendFormat": "7d ago",
+          "refId": "H",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 8d)) / 1000",
+          "legendFormat": "8d ago",
+          "refId": "I",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 9d)) / 1000",
+          "legendFormat": "9d ago",
+          "refId": "J",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 10d)) / 1000",
+          "legendFormat": "10d ago",
+          "refId": "K",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 11d)) / 1000",
+          "legendFormat": "11d ago",
+          "refId": "L",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 12d)) / 1000",
+          "legendFormat": "12d ago",
+          "refId": "M",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"house\"}[1h] offset 13d)) / 1000",
+          "legendFormat": "13d ago",
+          "refId": "N",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        }
+      ],
+      "timeFrom": "24h",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#184f95",
+                "value": 0.1
+              },
+              {
+                "color": "#2a78d6",
+                "value": 10
+              },
+              {
+                "color": "#5598e7",
+                "value": 50
+              },
+              {
+                "color": "#86b6ef",
+                "value": 100
+              },
+              {
+                "color": "#cde2fb",
+                "value": 250
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "rowHeight": 0.85,
+        "colWidth": 0.9,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "status-history",
+      "id": 15,
+      "title": "Farm: litres per hour, last 14 days",
+      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; brighter = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h])) / 1000",
+          "legendFormat": "Today",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 1d)) / 1000",
+          "legendFormat": "1d ago",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 2d)) / 1000",
+          "legendFormat": "2d ago",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 3d)) / 1000",
+          "legendFormat": "3d ago",
+          "refId": "D",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 4d)) / 1000",
+          "legendFormat": "4d ago",
+          "refId": "E",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 5d)) / 1000",
+          "legendFormat": "5d ago",
+          "refId": "F",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 6d)) / 1000",
+          "legendFormat": "6d ago",
+          "refId": "G",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 7d)) / 1000",
+          "legendFormat": "7d ago",
+          "refId": "H",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 8d)) / 1000",
+          "legendFormat": "8d ago",
+          "refId": "I",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 9d)) / 1000",
+          "legendFormat": "9d ago",
+          "refId": "J",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 10d)) / 1000",
+          "legendFormat": "10d ago",
+          "refId": "K",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 11d)) / 1000",
+          "legendFormat": "11d ago",
+          "refId": "L",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 12d)) / 1000",
+          "legendFormat": "12d ago",
+          "refId": "M",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(total_mL{job=\"water\",flow=\"farm\"}[1h] offset 13d)) / 1000",
+          "legendFormat": "13d ago",
+          "refId": "N",
+          "range": true,
+          "instant": false,
+          "interval": "1h"
+        }
+      ],
+      "timeFrom": "24h",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#184f95",
+                "value": 0.1
+              },
+              {
+                "color": "#2a78d6",
+                "value": 10
+              },
+              {
+                "color": "#5598e7",
+                "value": 50
+              },
+              {
+                "color": "#86b6ef",
+                "value": 100
+              },
+              {
+                "color": "#cde2fb",
+                "value": 250
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "rowHeight": 0.85,
+        "colWidth": 0.9,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 16,
+      "title": "Flow meter health",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 55
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "id": 17,
+      "title": "Flow meters",
+      "description": "Prometheus scrape status of each ESPHome flow meter.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "(up{job=\"water\"} * on (instance) group_left (flow) group by (instance, flow) (last_over_time(esphome_sensor_value{job=\"water\",id=\"uptime\"}[1d]))) or on (instance) up{job=\"water\"}",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 18,
+      "title": "WiFi signal",
+      "description": "Signal strength at each flow meter. Below about -80 dBm, expect dropouts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "esphome_sensor_value{job=\"water\",id=\"wifi_signal\"}",
+          "legendFormat": "{{flow}}",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 4,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#8e8e8e",
+                "value": -80
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "house"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "House"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "farm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Farm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      }
+    },
+    {
+      "type": "table",
+      "id": 19,
+      "title": "Restarts",
+      "description": "Restarts in the last 24h, uptime and the reason for the last restart.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bMQFsMInk"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "sum by (flow) (resets(esphome_sensor_value{job=\"water\",id=\"uptime\"}[24h]))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "max by (flow) (esphome_sensor_value{job=\"water\",id=\"uptime\"})",
+          "legendFormat": "",
+          "refId": "B",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bMQFsMInk"
+          },
+          "editorMode": "code",
+          "expr": "max by (flow, value) (esphome_text_sensor_value{job=\"water\",id=\"reset_reason\"})",
+          "legendFormat": "",
+          "refId": "C",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "flow",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Value #C": true
+            },
+            "indexByName": {
+              "flow": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "value": 3
+            },
+            "renameByName": {
+              "flow": "Site",
+              "Value #A": "Restarts (24h)",
+              "Value #B": "Uptime",
+              "value": "Last reset reason"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Site"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "house": {
+                        "text": "House",
+                        "index": 0
+                      },
+                      "farm": {
+                        "text": "Farm",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uptime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    }
+  ]
+}

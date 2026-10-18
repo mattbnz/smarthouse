@@ -1,0 +1,18 @@
+substitutions:
+  name: pumpmon-farm
+  friendly_name: Pumpmon Farm
+  # historically on D8 (GPIO15)- a boot strapping pin! Rewire to D5 if it causes trouble!
+  flow_pin: D8
+  ml_per_pulse: "3.4722"  # FS400A
+
+packages:
+  base: !include common/base.yaml
+  flow: !include common/flow-sensor.yaml
+
+# Static IP so Prometheus targets follow the config, not the board's MAC.
+wifi:
+  manual_ip:
+    static_ip: 10.230.2.230
+    gateway: !secret gateway
+    subnet: !secret subnet
+    dns1: !secret dns

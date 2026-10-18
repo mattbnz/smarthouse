@@ -1,0 +1,134 @@
+# promtool test rules water.rules.test.yml
+rule_files:
+  - water.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Burst at the house: 40L/min with the pump running.
+  - interval: 1m
+    input_series:
+      - series: 'total_mL{job="water",node="pumpmon",flow="house"}'
+        values: '0+40000x90'
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="house"}'
+        values: '40000x90'
+      - series: 'esphome_sensor_value{id="pump-house_power"}'
+        values: '500x90'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HighFlowRate
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: HighFlowRate
+        exp_alerts:
+          - exp_labels: {severity: email, job: water, node: pumpmon, flow: house}
+            exp_annotations:
+              summary: 'house: water flowing at 40L/min (>30L/min) for 5 minutes!'
+      - eval_time: 25m
+        alertname: LongFlowRateHouse
+        exp_alerts:
+          - exp_labels: {severity: email, job: water, node: pumpmon, flow: house}
+            exp_annotations:
+              summary: 'house: water flowing at 40.0L/min (>10L/min) for 20 minutes!'
+      - eval_time: 30m
+        alertname: PumpRunningNoFlow
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: LongPumping
+        exp_alerts:
+          - exp_labels: {severity: email, id: pump-house_power, flow: house}
+            exp_annotations:
+              summary: 'house: pump appears to have been running for more than 10 minutes!'
+
+  # Leak at the farm: no flow for an hour, then a steady 2L/min.
+  - interval: 1m
+    input_series:
+      - series: 'total_mL{job="water",node="pumpmon",flow="farm"}'
+        values: '0x60 0+2000x240'
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="farm"}'
+        values: '0x60 2000x240'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: ContinuousFlow
+        exp_alerts: []
+      - eval_time: 4h30m
+        alertname: ContinuousFlow
+        exp_alerts:
+          - exp_labels: {severity: email, job: water, node: pumpmon, flow: farm}
+            exp_annotations:
+              summary: 'farm: water has not stopped flowing for 3 hours (min 2000mL/min) - possible leak!'
+      - eval_time: 4h30m
+        alertname: ExtendedFlowRate
+        exp_alerts: []
+
+  # Farm pump running, but the flow meter reads zero.
+  - interval: 1m
+    input_series:
+      - series: 'esphome_sensor_value{id="pump-farm_power"}'
+        values: '500x30'
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="farm"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PumpRunningNoFlow
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: PumpRunningNoFlow
+        exp_alerts:
+          - exp_labels: {severity: email, id: pump-farm_power, flow: farm}
+            exp_annotations:
+              summary: 'farm: pump running (500W) for 5 minutes but no water flow measured - check flow sensor, pump prime, pipes!'
+
+  # House flow series gone (e.g. node down, relabel broken); pump data fine.
+  - interval: 1m
+    input_series:
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="farm"}'
+        values: '0x30'
+      - series: 'total_mL{job="water",node="pumpmon",flow="farm"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-house_power"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-house_daily_energy"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-farm_power"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-farm_daily_energy"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FlowSeriesMissing
+        exp_alerts:
+          - exp_labels: {severity: email, job: water, flow: house}
+            exp_annotations:
+              summary: 'house: no water flow data for 15 minutes - flow alerts cannot fire!'
+      - eval_time: 20m
+        alertname: PumpSeriesMissing
+        exp_alerts: []
+
+  # One pump sensor id disappears (e.g. renamed by an ESPHome upgrade).
+  - interval: 1m
+    input_series:
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="house"}'
+        values: '0x30'
+      - series: 'total_mL{job="water",node="pumpmon",flow="house"}'
+        values: '0x30'
+      - series: 'mL_per_min{job="water",node="pumpmon",flow="farm"}'
+        values: '0x30'
+      - series: 'total_mL{job="water",node="pumpmon",flow="farm"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-house_power"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-house_daily_energy"}'
+        values: '0x30'
+      - series: 'esphome_sensor_value{id="pump-farm_daily_energy"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PumpSeriesMissing
+        exp_alerts:
+          - exp_labels: {severity: email, id: pump-farm_power, flow: farm}
+            exp_annotations:
+              summary: 'farm: no pump-farm_power data for 15 minutes - pump alerts cannot fire!'
+      - eval_time: 20m
+        alertname: FlowSeriesMissing
+        exp_alerts: []
