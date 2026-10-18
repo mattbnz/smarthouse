@@ -1058,7 +1058,7 @@
       "type": "status-history",
       "id": 14,
       "title": "House: litres per hour, last 14 days",
-      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; brighter = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
+      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; darker = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
       "datasource": {
         "type": "prometheus",
         "uid": "bMQFsMInk"
@@ -1269,23 +1269,23 @@
                 "value": null
               },
               {
-                "color": "#184f95",
+                "color": "#86b6ef",
                 "value": 0.1
               },
               {
-                "color": "#2a78d6",
+                "color": "#5598e7",
                 "value": 10
               },
               {
-                "color": "#5598e7",
+                "color": "#2a78d6",
                 "value": 50
               },
               {
-                "color": "#86b6ef",
+                "color": "#1c5cab",
                 "value": 100
               },
               {
-                "color": "#cde2fb",
+                "color": "#0d366b",
                 "value": 250
               }
             ]
@@ -1317,7 +1317,7 @@
       "type": "status-history",
       "id": 15,
       "title": "Farm: litres per hour, last 14 days",
-      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; brighter = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
+      "description": "Each row is the same 24 hours, N days earlier; each cell is one hour. Blank = no water; darker = more (classes: >0, 10, 50, 100, 250 L). Look down a column to compare a time of day across days (e.g. overnight usage = leak).",
       "datasource": {
         "type": "prometheus",
         "uid": "bMQFsMInk"
@@ -1528,23 +1528,23 @@
                 "value": null
               },
               {
-                "color": "#184f95",
+                "color": "#86b6ef",
                 "value": 0.1
               },
               {
-                "color": "#2a78d6",
+                "color": "#5598e7",
                 "value": 10
               },
               {
-                "color": "#5598e7",
+                "color": "#2a78d6",
                 "value": 50
               },
               {
-                "color": "#86b6ef",
+                "color": "#1c5cab",
                 "value": 100
               },
               {
-                "color": "#cde2fb",
+                "color": "#0d366b",
                 "value": 250
               }
             ]

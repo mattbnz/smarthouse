@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generates the Water Grafana dashboard (water-dashboard-v2.json).
 
-    ./water-dashboard.py > water-dashboard-v2.json           # dark theme
-    ./water-dashboard.py --light > water-dashboard-v2.json   # light theme
+    ./water-dashboard.py > water-dashboard-v2.json          # light theme
+    ./water-dashboard.py --dark > water-dashboard-v2.json   # dark theme
 
 Colours are fixed (Grafana doesn't theme them), so the day x hour grids get a
 ramp chosen for the theme in use: more water = brighter on dark, darker on
@@ -19,13 +19,13 @@ SITES = [
     ("farm", "Farm", "#d95926", [5, 15, 30]),
 ]
 GRAY = "#8e8e8e"
-# Litres-per-hour classes for the day x hour grids: one blue hue, brighter =
-# more (validated as an ordinal ramp on Grafana's dark surface). 0 L is blank,
-# so any overnight use stands out.
+# Litres-per-hour classes for the day x hour grids: one blue hue, darker =
+# more on light, brighter = more on dark (each validated as an ordinal ramp on
+# its Grafana surface). 0 L is blank, so any overnight use stands out.
 HOUR_LIMITS = [0.1, 10, 50, 100, 250]
 HOUR_RAMP_DARK = ["#184f95", "#2a78d6", "#5598e7", "#86b6ef", "#cde2fb"]
 HOUR_RAMP_LIGHT = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"]
-LIGHT = "--light" in sys.argv
+LIGHT = "--dark" not in sys.argv
 HOUR_CLASSES = list(zip(HOUR_LIMITS, HOUR_RAMP_LIGHT if LIGHT else HOUR_RAMP_DARK))  # threshold lines: neutral, so they don't compete with site hues
 
 _id = [0]
